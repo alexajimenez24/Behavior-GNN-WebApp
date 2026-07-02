@@ -111,20 +111,26 @@ function IconRail({ currentScreen, onNavigate, onLog, unreadCount }) {
   );
 }
 
-export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNavigate, onLog, searchQuery, setSearchQuery }) {
+export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNavigate, onLog, searchQuery, setSearchQuery, chats, onLogout }) {
   const [showMenu, setShowMenu] = useState(false);
   const [tab, setTab] = useState('all');
   const [readChats, setReadChats] = useState(new Set());
+  const [viewingArchived, setViewingArchived] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedChats, setSelectedChats] = useState(new Set());
+
+  const liveChats = chats || CHATS;
 
   const isSearch = currentScreen === SCREENS.SEARCH;
   const isNewChat = currentScreen === SCREENS.NEW_CHAT;
+  const isArchived = viewingArchived && !isSearch && !isNewChat;
 
   const getContact = (contactId) => CONTACTS.find(c => c.id === contactId);
   const getLastMsg = (chat) => chat.messages[chat.messages.length - 1];
 
   const isUnread = (chat) => !readChats.has(chat.id);
 
-  const filteredChats = CHATS.filter(chat => {
+  const filteredChats = isArchived ? [] : liveChats.filter(chat => {
     const contact = getContact(chat.contactId);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -148,6 +154,14 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
   };
 
   const handleChatSelect = (chat) => {
+    if (selectMode) {
+      setSelectedChats(prev => {
+        const next = new Set(prev);
+        if (next.has(chat.id)) next.delete(chat.id); else next.add(chat.id);
+        return next;
+      });
+      return;
+    }
     setReadChats(prev => new Set([...prev, chat.id]));
     onLog({ screen_id: currentScreen, action_type: 'tap', target_id: `${TARGETS.CHAT_ITEM}_${chat.id}`, target_label: getContact(chat.contactId).name, next_screen_id: SCREENS.CHAT_VIEW });
     onSelectChat(chat);
@@ -155,12 +169,23 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
 
   const handleContactSelect = (contact) => {
     onLog({ screen_id: SCREENS.NEW_CHAT, action_type: 'tap', target_id: `${TARGETS.NEW_CHAT_CONTACT}_${contact.id}`, target_label: contact.name, next_screen_id: SCREENS.CHAT_VIEW });
-    const existingChat = CHATS.find(c => c.contactId === contact.id);
+    const existingChat = liveChats.find(c => c.contactId === contact.id);
     if (existingChat) setReadChats(prev => new Set([...prev, existingChat.id]));
     onSelectChat(existingChat || { id: `CH_NEW_${contact.id}`, contactId: contact.id, messages: [] }, true);
   };
 
-  const unreadCount = CHATS.filter(c => isUnread(c)).length;
+  const unreadCount = liveChats.filter(c => isUnread(c)).length;
+
+  const sidebarMenuItems = [
+    { label:'New group', id: TARGETS.SIDEBAR_MENU_NEW_GROUP, action: () => onNavigate(SCREENS.NEW_CHAT) },
+    { label:'Archived', id: TARGETS.SIDEBAR_MENU_ARCHIVED, action: () => setViewingArchived(true) },
+    { label:'Starred messages', id: TARGETS.NAV_STARRED, action: () => onNavigate(SCREENS.STARRED) },
+    { label:'Select chats', id: TARGETS.SIDEBAR_MENU_SELECT_CHATS, action: () => { setSelectMode(v => !v); setSelectedChats(new Set()); } },
+    { label:'Mark all as read', id: TARGETS.SIDEBAR_MENU_MARK_ALL_READ, action: () => setReadChats(new Set(liveChats.map(c => c.id))) },
+    { label:'App lock', id: TARGETS.SIDEBAR_MENU_APP_LOCK, action: () => onNavigate(SCREENS.SETTINGS) },
+    { label:'Log out', id: TARGETS.SIDEBAR_MENU_LOGOUT, danger:true,
+      action: () => { if (window.confirm('Log out of this research session?')) onLogout && onLogout(); } },
+  ];
 
   return (
     <div style={{ display:'flex', height:'100%', flexShrink:0 }}>
@@ -168,43 +193,52 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
 
       <div style={{ width:412, background:'#ffffff', borderRight:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', flexShrink:0, overflow:'hidden' }}>
         <div style={{ padding:'12px 16px', background:'#ffffff', borderBottom:'1px solid #e9edef', display:'flex', alignItems:'center', justifyContent:'space-between', minHeight:60, flexShrink:0 }}>
-          {isSearch || isNewChat ? (
+          {isSearch || isNewChat || isArchived ? (
             <div style={{ display:'flex', alignItems:'center', gap:12, flex:1 }}>
-              <button onClick={() => { onNavigate(SCREENS.CHAT_LIST); setSearchQuery(''); }}
+              <button onClick={() => {
+                  if (isArchived) { setViewingArchived(false); return; }
+                  onNavigate(SCREENS.CHAT_LIST); setSearchQuery('');
+                }}
                 style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', padding:'4px 8px 4px 0', fontSize:20, lineHeight:1 }}>
                 ←
               </button>
-              <span style={{ color:'#111b21', fontSize:16, fontWeight:600 }}>
-                {isSearch ? 'Search' : 'New Chat'}
+              <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>
+                {isSearch ? 'Search' : isNewChat ? 'New Chat' : 'Archived'}
               </span>
+            </div>
+          ) : selectMode ? (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flex:1 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <button onClick={() => { setSelectMode(false); setSelectedChats(new Set()); }}
+                  style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
+                <span style={{ color:'#111b21', fontSize:15, fontWeight:500 }}>{selectedChats.size} selected</span>
+              </div>
+              <button onClick={() => { setReadChats(prev => new Set([...prev, ...selectedChats])); setSelectMode(false); setSelectedChats(new Set()); }}
+                style={{ background:'none', border:'none', color:'#00a884', cursor:'pointer', fontSize:13, fontWeight:600 }}>
+                Mark read
+              </button>
             </div>
           ) : (
             <>
-              <span style={{ color:'#00a884', fontSize:22, fontWeight:700 }}>WhatsApp</span>
+              <span style={{ color:'#00a884', fontSize:22, fontWeight:600 }}>WhatsApp</span>
               <div style={{ display:'flex', gap:4 }}>
                 <IconBtn onClick={handleNewChatClick} title="New chat">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h10v2H7zm0-3h10v2H7zm0 6h7v2H7z"/></svg>
                 </IconBtn>
                 <div style={{ position:'relative' }}>
-                  <IconBtn onClick={() => setShowMenu(!showMenu)} title="Menu">
+                  <IconBtn onClick={() => { onLog({ screen_id: SCREENS.CHAT_LIST, action_type:'tap', target_id: TARGETS.NAV_MENU, target_label:'menu' }); setShowMenu(!showMenu); }} title="Menu">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                   </IconBtn>
                   {showMenu && (
-                    <div style={{ position:'absolute', right:0, top:'100%', background:'#ffffff', borderRadius:6, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:100, minWidth:200, overflow:'hidden' }}>
-                      {[
-                        { label:'New group',         id: TARGETS.NAV_NEW_CHAT },
-                        { label:'Starred messages',  id: TARGETS.NAV_STARRED,  screen: SCREENS.STARRED },
-                        { label:'Settings',          id: TARGETS.NAV_SETTINGS, screen: SCREENS.SETTINGS },
-                      ].map(item => (
+                    <div style={{ position:'absolute', right:0, top:'100%', background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:100, minWidth:220, overflow:'hidden', padding:'6px 0' }}>
+                      {sidebarMenuItems.map(item => (
                         <div key={item.label}
                           onClick={() => {
                             setShowMenu(false);
-                            if (item.screen) {
-                              onLog({ screen_id: SCREENS.CHAT_LIST, action_type: 'tap', target_id: item.id, target_label: item.label, next_screen_id: item.screen });
-                              onNavigate(item.screen);
-                            }
+                            onLog({ screen_id: SCREENS.CHAT_LIST, action_type: 'tap', target_id: item.id, target_label: item.label });
+                            item.action();
                           }}
-                          style={{ padding:'13px 20px', color:'#111b21', fontSize:14, cursor:'pointer' }}
+                          style={{ padding:'11px 20px', color: item.danger ? '#ea0038' : '#111b21', fontSize:14, cursor:'pointer' }}
                           onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
                           onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                           {item.label}
@@ -218,28 +252,30 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           )}
         </div>
 
-        <div style={{ padding:'8px 12px', background:'#ffffff', flexShrink:0 }}>
-          <div style={{ background:'#f0f2f5', borderRadius:8, display:'flex', alignItems:'center', gap:8, padding:'8px 12px' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input
-              value={searchQuery}
-              onChange={e => {
-                setSearchQuery(e.target.value);
-                onLog({ screen_id: currentScreen, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'search field' });
-              }}
-              onFocus={() => {
-                if (currentScreen !== SCREENS.SEARCH && currentScreen !== SCREENS.NEW_CHAT) handleSearchClick();
-              }}
-              placeholder={isNewChat ? 'Search contacts' : 'Search or start new chat'}
-              style={{ background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, flex:1, fontFamily:'inherit' }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:18 }}>×</button>
-            )}
+        {!isArchived && (
+          <div style={{ padding:'8px 12px', background:'#ffffff', flexShrink:0 }}>
+            <div style={{ background:'#f0f2f5', borderRadius:8, display:'flex', alignItems:'center', gap:8, padding:'8px 12px' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <input
+                value={searchQuery}
+                onChange={e => {
+                  setSearchQuery(e.target.value);
+                  onLog({ screen_id: currentScreen, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'search field' });
+                }}
+                onFocus={() => {
+                  if (currentScreen !== SCREENS.SEARCH && currentScreen !== SCREENS.NEW_CHAT) handleSearchClick();
+                }}
+                placeholder={isNewChat ? 'Search contacts' : 'Search or start new chat'}
+                style={{ background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, flex:1, fontFamily:'inherit' }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:18 }}>×</button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {!isSearch && !isNewChat && (
+        {!isSearch && !isNewChat && !isArchived && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 12px 10px', background:'#ffffff', flexShrink:0 }}>
             {[
               { key:'all',        label:'All' },
@@ -279,7 +315,7 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
                   onMouseLeave={e => e.currentTarget.style.background='transparent'}>
                   <Avatar contact={contact} />
                   <div>
-                    <div style={{ color:'#111b21', fontSize:15, fontWeight:500 }}>{contact.name}</div>
+                    <div style={{ color:'#111b21', fontSize:15, fontWeight:400 }}>{contact.name}</div>
                     <div style={{ color:'#667781', fontSize:13 }}>{contact.phone}</div>
                   </div>
                 </div>
@@ -287,7 +323,16 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           </div>
         )}
 
-        {!isNewChat && (
+        {isArchived && (
+          <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <div style={{ textAlign:'center', color:'#667781', fontSize:14, padding:'40px 20px' }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🗄️</div>
+              No archived chats
+            </div>
+          </div>
+        )}
+
+        {!isNewChat && !isArchived && (
           <div style={{ flex:1, overflowY:'auto' }}>
             {filteredChats.length === 0 && (
               <div style={{ textAlign:'center', color:'#667781', fontSize:14, padding:'40px 20px' }}>
@@ -302,19 +347,30 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
               const last = getLastMsg(chat);
               const isActive = activeChat?.id === chat.id;
               const unread = isUnread(chat);
+              const isSelected = selectedChats.has(chat.id);
               return (
                 <div key={chat.id} onClick={() => handleChatSelect(chat)}
                   style={{
                     display:'flex', alignItems:'center', gap:14, padding:'12px 16px',
-                    cursor:'pointer', background: isActive ? '#f0f2f5' : 'transparent',
+                    cursor:'pointer', background: isSelected ? '#e7f8f3' : (isActive ? '#f0f2f5' : 'transparent'),
                     transition:'background 0.1s', borderBottom:'1px solid #f0f2f5',
                   }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background='#f5f6f6'; }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background='transparent'; }}>
+                  onMouseEnter={e => { if (!isActive && !isSelected) e.currentTarget.style.background='#f5f6f6'; }}
+                  onMouseLeave={e => { if (!isActive && !isSelected) e.currentTarget.style.background='transparent'; }}>
+                  {selectMode && (
+                    <div style={{
+                      width:20, height:20, borderRadius:'50%', flexShrink:0,
+                      border: isSelected ? 'none' : '2px solid #b3bbc0',
+                      background: isSelected ? '#00a884' : 'transparent',
+                      display:'flex', alignItems:'center', justifyContent:'center', color:'#ffffff', fontSize:12,
+                    }}>
+                      {isSelected ? '✓' : ''}
+                    </div>
+                  )}
                   <Avatar contact={contact} />
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                      <span style={{ color:'#111b21', fontSize:15, fontWeight: unread ? 600 : 500 }}>{contact.name}</span>
+                      <span style={{ color:'#111b21', fontSize:15, fontWeight: unread ? 600 : 400 }}>{contact.name}</span>
                       <span style={{ color: unread ? '#00a884' : '#667781', fontSize:12, flexShrink:0 }}>
                         {last ? formatTime(last.time) : ''}
                       </span>
@@ -327,7 +383,7 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
                               : last.text)
                           : 'No messages yet'}
                       </div>
-                      {unread && (
+                      {unread && !selectMode && (
                         <div style={{ width:9, height:9, borderRadius:'50%', background:'#00a884', flexShrink:0, marginLeft:8 }} />
                       )}
                     </div>

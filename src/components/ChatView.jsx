@@ -18,15 +18,25 @@ function Avatar({ contact, size = 40 }) {
   );
 }
 
-export default function ChatView({ chat, onNavigate, onLog, onSend, onForward, onStar, onViewMessage, taskState, updateTaskState }) {
+export default function ChatView({
+  chat, onNavigate, onLog, onSend, onForward, onStar, onViewMessage, taskState, updateTaskState,
+  onOpenContactPanel,
+  isMuted, isBlocked, isFavorite,
+  onToggleMute, onToggleBlock, onToggleFavorite,
+  onClearChat, onDeleteChat,
+}) {
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [showForward, setShowForward] = useState(null);
   const [showMsgMenu, setShowMsgMenu] = useState(null);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [attachAccept, setAttachAccept] = useState('*/*');
   const [messages, setMessages] = useState(chat.messages);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const contact = CONTACTS.find(c => c.id === chat.contactId);
 
@@ -92,12 +102,91 @@ export default function ChatView({ chat, onNavigate, onLog, onSend, onForward, o
 
   const handleContactHeader = () => {
     onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.CONTACT_HEADER, target_label: contact.name, next_screen_id: SCREENS.CONTACT_INFO });
-    onNavigate(SCREENS.CONTACT_INFO);
+    onOpenContactPanel && onOpenContactPanel();
   };
 
   const handleBack = () => {
     onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'back', target_id: TARGETS.BACK_BUTTON, target_label: 'back to chat list', next_screen_id: SCREENS.CHAT_LIST });
     onNavigate(SCREENS.CHAT_LIST);
+  };
+
+  // ---- Attach (+) menu ----
+  const handleAttachClick = () => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.ATTACH_BTN, target_label: 'attach' });
+    setShowMoreMenu(false);
+    setShowAttachMenu(v => !v);
+  };
+
+  const openFilePicker = (accept, targetId, label) => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: targetId, target_label: label });
+    setAttachAccept(accept);
+    setShowAttachMenu(false);
+    setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
+  const handleFileChosen = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) { return; }
+    const isImage = file.type.startsWith('image/');
+    const newMsg = {
+      id: `MSG_ATT_${Date.now()}`,
+      from: 'me',
+      text: isImage ? '📷 Photo' : `📎 ${file.name}`,
+      time: Date.now(),
+      starred: false,
+      attachment: { name: file.name, type: file.type, isImage, url: isImage ? URL.createObjectURL(file) : null },
+    };
+    setMessages(prev => [...prev, newMsg]);
+    onSend && onSend({ chatId: chat.id, message: newMsg });
+    updateTaskState && updateTaskState('sentMessages', { chatId: chat.id, msg: newMsg });
+    e.target.value = '';
+  };
+
+  const attachOptions = [
+    { label:'Document',       color:'#5157ae', icon:'📄', accept:'.pdf,.doc,.docx,.txt,application/*', target: TARGETS.ATTACH_MENU_DOC },
+    { label:'Photos & videos',color:'#bf59cf', icon:'🖼️', accept:'image/*,video/*',                    target: TARGETS.ATTACH_MENU_PHOTOS },
+    { label:'Camera',         color:'#c0447c', icon:'📷', accept:'image/*',                             target: TARGETS.ATTACH_MENU_CAMERA },
+    { label:'Contact',        color:'#4c9fe8', icon:'👤', target: TARGETS.ATTACH_MENU_CONTACT, stub:true },
+    { label:'Poll',           color:'#e3a13f', icon:'📊', target: TARGETS.ATTACH_MENU_POLL,    stub:true },
+  ];
+
+  // ---- Header "more options" (⋮) menu ----
+  const closeMoreMenu = () => setShowMoreMenu(false);
+
+  const moreMenuItems = [
+    { label:'Contact info', target: TARGETS.CHAT_MENU_INFO,
+      action: () => onOpenContactPanel && onOpenContactPanel() },
+    { label:'Search', target: TARGETS.CHAT_MENU_SEARCH,
+      action: () => onNavigate(SCREENS.SEARCH) },
+    { label:'Select messages', target: TARGETS.CHAT_MENU_SELECT,
+      action: () => {} },
+    { label: isMuted ? 'Unmute notifications' : 'Mute notifications', target: TARGETS.CONTACT_MUTE, arrow:true,
+      action: () => onToggleMute && onToggleMute() },
+    { label:'Disappearing messages', target: TARGETS.CHAT_MENU_DISAPPEARING, arrow:true,
+      action: () => {} },
+    { label: isFavorite ? 'Remove from Favourites' : 'Add to Favourites', target: TARGETS.CONTACT_FAVORITE,
+      action: () => onToggleFavorite && onToggleFavorite() },
+    { label:'Add to list', target: TARGETS.CHAT_MENU_ADD_LIST, arrow:true,
+      action: () => {} },
+    { divider:true },
+    { label:'Close chat', target: TARGETS.CHAT_MENU_CLOSE_CHAT,
+      action: () => onNavigate(SCREENS.CHAT_LIST) },
+    { label:'Send call link', target: TARGETS.CHAT_MENU_CALL_LINK,
+      action: () => {} },
+    { label:'Report', target: TARGETS.CHAT_MENU_REPORT,
+      action: () => { window.confirm(`Report ${contact.name}? They won't be notified.`); } },
+    { label: isBlocked ? `Unblock ${contact.name}` : `Block ${contact.name}`, target: TARGETS.CONTACT_BLOCK, danger:true,
+      action: () => onToggleBlock && onToggleBlock() },
+    { label:'Clear chat', target: TARGETS.CHAT_MENU_CLEAR, danger:true,
+      action: () => { if (window.confirm('Clear this chat? Messages will be removed for you.')) { onClearChat && onClearChat(chat.id); } } },
+    { label:'Delete chat', target: TARGETS.CHAT_MENU_DELETE, danger:true,
+      action: () => { if (window.confirm('Delete this chat?')) { onDeleteChat && onDeleteChat(chat.id); } } },
+  ];
+
+  const handleMoreMenuItemClick = (item) => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: item.target, target_label: item.label });
+    setShowMoreMenu(false);
+    item.action();
   };
 
   const replyRef = messages.find(m => m.id === replyTo?.id);
@@ -111,14 +200,36 @@ export default function ChatView({ chat, onNavigate, onLog, onSend, onForward, o
         <div onClick={handleContactHeader} style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer', flex:1 }}>
           <Avatar contact={contact} />
           <div>
-            <div style={{ color:'#111b21', fontSize:15, fontWeight:600 }}>{contact.name}</div>
-            <div style={{ color:'#667781', fontSize:13 }}>online</div>
+            <div style={{ color:'#111b21', fontSize:15, fontWeight:400 }}>{contact.name}</div>
+            <div style={{ color:'#667781', fontSize:13 }}>
+              {isBlocked ? 'blocked' : 'online'}{isMuted ? ' · muted' : ''}
+            </div>
           </div>
         </div>
         <div style={{ display:'flex', gap:4 }}>
           <IconBtn title="Video call"><svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg></IconBtn>
           <IconBtn title="Search in chat" onClick={() => onNavigate(SCREENS.SEARCH)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></IconBtn>
-          <IconBtn title="More options"><svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></IconBtn>
+          <div style={{ position:'relative' }}>
+            <IconBtn title="More options" onClick={() => { onLog({ screen_id: SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.CHAT_MORE_BTN, target_label:'more options' }); setShowAttachMenu(false); setShowMoreMenu(v => !v); }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </IconBtn>
+
+            {showMoreMenu && (
+              <div style={{ position:'absolute', right:0, top:'100%', marginTop:4, background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:70, minWidth:250, overflow:'hidden', padding:'6px 0' }}>
+                {moreMenuItems.map((item, i) => item.divider ? (
+                  <div key={`div_${i}`} style={{ height:1, background:'#e9edef', margin:'6px 0' }} />
+                ) : (
+                  <div key={item.label} onClick={() => handleMoreMenuItemClick(item)}
+                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 20px', color: item.danger ? '#ea0038' : '#111b21', fontSize:14, cursor:'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                    <span>{item.label}</span>
+                    {item.arrow && <span style={{ color:'#8696a0', fontSize:13 }}>›</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -155,7 +266,10 @@ export default function ChatView({ chat, onNavigate, onLog, onSend, onForward, o
                     border: msg.starred ? '1px solid #f0b42999' : 'none',
                   }}>
                     {msg.forwarded && <div style={{ color:'#667781', fontSize:11, marginBottom:3, display:'flex', alignItems:'center', gap:4 }}>↪ Forwarded</div>}
-                    <span style={{ color:'#111b21', fontSize:14, lineHeight:1.5, wordBreak:'break-word' }}>{msg.text}</span>
+                    {msg.attachment?.isImage && (
+                      <img src={msg.attachment.url} alt={msg.attachment.name} style={{ maxWidth:260, maxHeight:260, borderRadius:8, display:'block', marginBottom:4, objectFit:'cover' }} />
+                    )}
+                    <span style={{ color:'#111b21', fontSize:14, fontWeight:400, lineHeight:1.5, wordBreak:'break-word' }}>{msg.text}</span>
                     <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:4, marginTop:2 }}>
                       {msg.starred && <span style={{ fontSize:10 }}>⭐</span>}
                       <span style={{ color:'#667781', fontSize:11 }}>{formatTime(msg.time)}</span>
@@ -199,29 +313,56 @@ export default function ChatView({ chat, onNavigate, onLog, onSend, onForward, o
         </div>
       )}
 
-      <div style={{ background:'#f0f2f5', padding:'8px 16px', display:'flex', alignItems:'center', gap:10, zIndex:10 }}>
-        <IconBtn title="Emoji" onClick={() => onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.EMOJI_BTN, target_label:'emoji' })}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
-        </IconBtn>
-        <IconBtn title="Attach" onClick={() => onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.ATTACH_BTN, target_label:'attach' })}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
-        </IconBtn>
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={e => { setInput(e.target.value); onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'text_input', target_id:TARGETS.MSG_INPUT, target_label:'message input' }); }}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-          placeholder="Type a message"
-          style={{ flex:1, background:'#ffffff', border:'1px solid #e9edef', borderRadius:8, padding:'11px 16px', color:'#111b21', fontSize:14, outline:'none', fontFamily:'inherit' }}
-        />
-        <button onClick={handleSend} style={{ width:44, height:44, borderRadius:'50%', background:'#00a884', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-          {input.trim() ? (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11h-2z"/></svg>
-          )}
-        </button>
+      {/* Hidden native file input used by the attach popup */}
+      <input ref={fileInputRef} type="file" accept={attachAccept} style={{ display:'none' }} onChange={handleFileChosen} />
+
+      <div style={{ background:'#f0f2f5', padding:'8px 12px 10px', zIndex:10, position:'relative' }}>
+        {showAttachMenu && (
+          <div style={{ position:'absolute', bottom:'100%', left:8, marginBottom:8, background:'#ffffff', borderRadius:12, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:70, padding:'8px 6px', minWidth:230 }}>
+            {attachOptions.map(item => (
+              <div key={item.label}
+                onClick={() => item.stub
+                  ? (() => { onLog({ screen_id: SCREENS.CHAT_VIEW, action_type:'tap', target_id:item.target, target_label:item.label }); setShowAttachMenu(false); })()
+                  : openFilePicker(item.accept, item.target, item.label)}
+                style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 12px', borderRadius:8, cursor:'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                <div style={{ width:36, height:36, borderRadius:'50%', background:item.color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:'white', flexShrink:0 }}>{item.icon}</div>
+                <span style={{ color:'#111b21', fontSize:14 }}>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display:'flex', alignItems:'center', gap:0, background:'#ffffff', borderRadius:24, padding:'4px 6px', boxShadow:'0 1px 3px rgba(11,20,26,0.10)' }}>
+          <IconBtn title="Attach" onClick={handleAttachClick}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f" style={{ transform: showAttachMenu ? 'rotate(45deg)' : 'none', transition:'transform 0.15s' }}><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM11 12h2V9h3V7h-3V4h-2v3H8v2h3v3z"/></svg>
+          </IconBtn>
+          <IconBtn title="Emoji" onClick={() => { setShowAttachMenu(false); onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.EMOJI_BTN, target_label:'emoji' }); }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+          </IconBtn>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={e => { setInput(e.target.value); onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'text_input', target_id:TARGETS.MSG_INPUT, target_label:'message input' }); }}
+            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            onFocus={() => { setShowAttachMenu(false); setShowMoreMenu(false); }}
+            placeholder="Type a message"
+            style={{ flex:1, background:'none', border:'none', outline:'none', color:'#111b21', fontSize:15, fontWeight:400, padding:'9px 8px', fontFamily:'inherit' }}
+          />
+          <IconBtn title={input.trim() ? 'Send' : 'Voice message'} onClick={handleSend}>
+            {input.trim() ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#00a884"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11h-2z"/></svg>
+            )}
+          </IconBtn>
+        </div>
       </div>
+
+      {(showAttachMenu || showMoreMenu) && (
+        <div onClick={() => { setShowAttachMenu(false); setShowMoreMenu(false); }} style={{ position:'fixed', inset:0, zIndex:60 }} />
+      )}
 
       {showForward && (
         <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>

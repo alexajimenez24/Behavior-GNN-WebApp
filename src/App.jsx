@@ -29,6 +29,12 @@ export default function App() {
   const freshChats = () => CHATS.map(c => ({ ...c, messages: [...c.messages.map(m => ({ ...m }))] }));
   const [chats, setChats] = useState(freshChats);
 
+  // Contact info side panel + per-contact state (mute / block / favourite)
+  const [contactPanelOpen, setContactPanelOpen] = useState(false);
+  const [mutedContacts, setMutedContacts] = useState(new Set());
+  const [blockedContacts, setBlockedContacts] = useState(new Set());
+  const [favoriteContacts, setFavoriteContacts] = useState(new Set());
+
   const logger = useLogger(participant);
   const {
     logEvent, startTrial, endTrial, markHelpUsed,
@@ -103,6 +109,10 @@ export default function App() {
     setLastTrial(null);
     setLastSuccess(false);
     setTaskStartTime(null);
+    setContactPanelOpen(false);
+    setMutedContacts(new Set());
+    setBlockedContacts(new Set());
+    setFavoriteContacts(new Set());
   };
 
  
@@ -117,12 +127,14 @@ export default function App() {
   const handleNavigate = useCallback((screen) => {
     setCurrentScreen(screen);
     if (screen === SCREENS.CHAT_LIST) setActiveChat(null);
+    setContactPanelOpen(false);
   }, []);
 
   const handleSelectChat = useCallback((chat, isNew = false) => {
     const live = chats.find(c => c.id === chat.id) || chat;
     setActiveChat(live);
     setCurrentScreen(SCREENS.CHAT_VIEW);
+    setContactPanelOpen(false);
     if (isNew) updateTaskState('newChatsStarted', chat.contactId);
   }, [chats, updateTaskState]);
 
@@ -147,6 +159,36 @@ export default function App() {
       ...c,
       messages: c.messages.map(m => m.id === msg.id ? { ...m, starred: !m.starred } : m),
     })));
+  }, []);
+
+  // ---- Contact info side panel ----
+  const handleOpenContactPanel = useCallback(() => setContactPanelOpen(true), []);
+  const handleCloseContactPanel = useCallback(() => setContactPanelOpen(false), []);
+
+  // ---- Mute / Block / Favourite (keyed by contactId, shared between the
+  //      contact-info panel and the chat header "more options" menu) ----
+  const toggleInSet = (setter) => (id) => {
+    setter(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const handleToggleMute = toggleInSet(setMutedContacts);
+  const handleToggleBlock = toggleInSet(setBlockedContacts);
+  const handleToggleFavorite = toggleInSet(setFavoriteContacts);
+
+  // ---- Clear / delete chat (from the chat header "more options" menu) ----
+  const handleClearChat = useCallback((chatId) => {
+    setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [] } : c));
+    setActiveChat(prev => prev && prev.id === chatId ? { ...prev, messages: [] } : prev);
+  }, []);
+
+  const handleDeleteChat = useCallback((chatId) => {
+    setChats(prev => prev.filter(c => c.id !== chatId));
+    setActiveChat(prev => prev && prev.id === chatId ? null : prev);
+    setCurrentScreen(SCREENS.CHAT_LIST);
+    setContactPanelOpen(false);
   }, []);
 
   if (!participant) {
@@ -217,6 +259,8 @@ export default function App() {
             setSearchQuery(q);
             if (q) updateTaskState('searchesPerformed', q);
           }}
+          chats={chats}
+          onLogout={handleRestart}
         />
 
 
@@ -232,15 +276,36 @@ export default function App() {
               onViewMessage={(msgId) => updateTaskState('viewedMessages', msgId)}
               taskState={taskState}
               updateTaskState={updateTaskState}
+              onOpenContactPanel={handleOpenContactPanel}
+              isMuted={mutedContacts.has(liveActiveChat.contactId)}
+              isBlocked={blockedContacts.has(liveActiveChat.contactId)}
+              isFavorite={favoriteContacts.has(liveActiveChat.contactId)}
+              onToggleMute={() => handleToggleMute(liveActiveChat.contactId)}
+              onToggleBlock={() => handleToggleBlock(liveActiveChat.contactId)}
+              onToggleFavorite={() => handleToggleFavorite(liveActiveChat.contactId)}
+              onClearChat={handleClearChat}
+              onDeleteChat={handleDeleteChat}
             />
-          ) : currentScreen === SCREENS.CONTACT_INFO ? (
-            <ContactInfo chat={liveActiveChat} onNavigate={handleNavigate} onLog={logEvent} />
           ) : currentScreen === SCREENS.STARRED ? (
             <StarredMessages allChats={chats} onNavigate={handleNavigate} onLog={logEvent} />
           ) : currentScreen === SCREENS.SETTINGS ? (
             <Settings onNavigate={handleNavigate} onLog={logEvent} />
           ) : (
             <EmptyState />
+          )}
+
+          {contactPanelOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
+            <ContactInfo
+              chat={liveActiveChat}
+              onClose={handleCloseContactPanel}
+              onLog={logEvent}
+              isMuted={mutedContacts.has(liveActiveChat.contactId)}
+              isBlocked={blockedContacts.has(liveActiveChat.contactId)}
+              isFavorite={favoriteContacts.has(liveActiveChat.contactId)}
+              onToggleMute={() => handleToggleMute(liveActiveChat.contactId)}
+              onToggleBlock={() => handleToggleBlock(liveActiveChat.contactId)}
+              onToggleFavorite={() => handleToggleFavorite(liveActiveChat.contactId)}
+            />
           )}
 
           {taskPhase === 'briefing' && (

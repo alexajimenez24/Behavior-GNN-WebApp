@@ -7,12 +7,58 @@ function Header({ title, onBack, onLog, currentScreen }) {
     <div style={{ background:'#f0f2f5', borderBottom:'1px solid #e9edef', padding:'0 16px', display:'flex', alignItems:'center', gap:12, minHeight:60, flexShrink:0 }}>
       <button onClick={() => { onLog({ screen_id:currentScreen, action_type:'back', target_id:TARGETS.BACK_BUTTON, target_label:'back', next_screen_id:SCREENS.CHAT_LIST }); onBack(); }}
         style={{ background:'none', border:'none', color:'#00a884', cursor:'pointer', fontSize:22, padding:'4px 8px 4px 0', lineHeight:1 }}>←</button>
-      <span style={{ color:'#111b21', fontSize:16, fontWeight:600 }}>{title}</span>
+      <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>{title}</span>
     </div>
   );
 }
 
-export function ContactInfo({ chat, onNavigate, onLog }) {
+// A toggle switch matching WhatsApp's style
+function Switch({ checked, onChange }) {
+  return (
+    <div onClick={onChange} role="switch" aria-checked={checked} style={{
+      width:36, height:20, borderRadius:12, background: checked ? '#00a884' : '#d1d7db',
+      cursor:'pointer', position:'relative', transition:'background 0.15s', flexShrink:0,
+    }}>
+      <div style={{
+        position:'absolute', top:2, left: checked ? 18 : 2, width:16, height:16, borderRadius:'50%',
+        background:'#ffffff', transition:'left 0.15s', boxShadow:'0 1px 2px rgba(0,0,0,0.25)',
+      }} />
+    </div>
+  );
+}
+
+function PanelRow({ icon, label, sub, trailing, onClick, multiline }) {
+  return (
+    <div onClick={onClick} style={{ display:'flex', alignItems: multiline ? 'flex-start' : 'center', gap:16, padding:'13px 24px', cursor: onClick ? 'pointer' : 'default' }}
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.background = '#f5f6f6'; }}
+      onMouseLeave={e => { if (onClick) e.currentTarget.style.background = 'transparent'; }}>
+      <span style={{ fontSize:18, width:20, textAlign:'center', flexShrink:0, marginTop: multiline ? 2 : 0 }}>{icon}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ color:'#111b21', fontSize:15, fontWeight:400 }}>{label}</div>
+        {sub && <div style={{ color:'#667781', fontSize:13, marginTop:2, lineHeight:1.4 }}>{sub}</div>}
+      </div>
+      {trailing != null && <span style={{ color:'#667781', fontSize:13, flexShrink:0 }}>{trailing}</span>}
+    </div>
+  );
+}
+
+function PanelToggleRow({ icon, label, value, onToggle }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:16, padding:'13px 24px' }}>
+      <span style={{ fontSize:18, width:20, textAlign:'center', flexShrink:0 }}>{icon}</span>
+      <div style={{ flex:1, color:'#111b21', fontSize:15, fontWeight:400 }}>{label}</div>
+      <Switch checked={value} onChange={onToggle} />
+    </div>
+  );
+}
+
+// Real WhatsApp-style contact info panel, rendered as a fixed-width side panel
+// alongside the chat (not a full-screen takeover).
+export function ContactInfo({
+  chat, onClose, onLog,
+  isMuted = false, isBlocked = false, isFavorite = false,
+  onToggleMute, onToggleBlock, onToggleFavorite,
+}) {
   if (!chat) return null;
   const contact = CONTACTS.find(c => c.id === chat.contactId);
   const currentScreen = SCREENS.CONTACT_INFO;
@@ -20,32 +66,67 @@ export function ContactInfo({ chat, onNavigate, onLog }) {
   const logTap = (target_id, label) => onLog({ screen_id: currentScreen, action_type:'tap', target_id, target_label:label });
 
   return (
-    <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#f0f2f5', overflow:'hidden' }}>
-      <Header title="Contact Info" onBack={() => onNavigate(SCREENS.CHAT_VIEW)} onLog={onLog} currentScreen={currentScreen} />
+    <div style={{ width:400, flexShrink:0, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
+      <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
+        <button onClick={() => { logTap(TARGETS.CONTACT_PANEL_CLOSE, 'close contact info'); onClose(); }}
+          style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
+        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>Contact info</span>
+      </div>
+
       <div style={{ flex:1, overflowY:'auto' }}>
-        <div style={{ background:'#ffffff', padding:'32px 24px', textAlign:'center', marginBottom:8 }}>
-          <div style={{ width:100, height:100, borderRadius:'50%', background:contact.color+'33', border:`3px solid ${contact.color}88`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:32, fontWeight:700, color:contact.color, margin:'0 auto 16px' }}>{contact.avatar}</div>
-          <div style={{ color:'#111b21', fontSize:22, fontWeight:600 }}>{contact.name}</div>
+        <div style={{ padding:'32px 24px 24px', textAlign:'center' }}>
+          <div style={{ width:120, height:120, borderRadius:'50%', background:contact.color+'33', border:`3px solid ${contact.color}88`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:36, fontWeight:600, color:contact.color, margin:'0 auto 16px' }}>{contact.avatar}</div>
+          <div style={{ color:'#111b21', fontSize:20, fontWeight:400 }}>{contact.name}</div>
           <div style={{ color:'#667781', fontSize:14, marginTop:4 }}>{contact.phone}</div>
+
+          <button onClick={() => { logTap(TARGETS.CONTACT_SEARCH, 'search in chat'); }}
+            style={{ marginTop:20, width:52, height:52, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
+            onMouseEnter={e => e.currentTarget.style.background='#e9edef'}
+            onMouseLeave={e => e.currentTarget.style.background='#f0f2f5'}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+          <div style={{ color:'#667781', fontSize:12, marginTop:6 }}>Search</div>
         </div>
 
-        <div style={{ background:'#ffffff', margin:'0 0 8px', padding:'8px 0' }}>
-          {[
-            { icon:'🔇', label:'Mute notifications', target:TARGETS.CONTACT_MUTE },
-            { icon:'🚫', label:'Block contact', target:TARGETS.CONTACT_BLOCK },
-          ].map(item => (
-            <div key={item.label} onClick={() => logTap(item.target, item.label)}
-              style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#111b21', fontSize:15 }}
-              onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
-              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-              <span style={{ fontSize:20 }}>{item.icon}</span> {item.label}
-            </div>
-          ))}
-        </div>
+        <div style={{ height:8, background:'#f0f2f5' }} />
 
-        <div style={{ background:'#ffffff', padding:'16px 24px' }}>
-          <div onClick={() => logTap(TARGETS.CONTACT_MEDIA_TAB, 'media tab')}
-            style={{ color:'#00a884', fontSize:14, fontWeight:600, cursor:'pointer' }}>Media, links, and docs ({chat.messages.length} messages)</div>
+        <PanelRow icon="🗂️" label="Media, links, and docs" trailing={chat.messages.filter(m => m.attachment).length}
+          onClick={() => logTap(TARGETS.CONTACT_MEDIA_TAB, 'media tab')} />
+        <PanelRow icon="⭐" label="Starred messages" trailing={chat.messages.filter(m => m.starred).length}
+          onClick={() => logTap(TARGETS.CONTACT_STARRED, 'starred messages')} />
+
+        <PanelToggleRow icon={isMuted ? '🔕' : '🔔'} label="Mute notifications" value={isMuted}
+          onToggle={() => { logTap(TARGETS.CONTACT_MUTE, 'mute notifications'); onToggleMute && onToggleMute(); }} />
+
+        <PanelRow icon="⏱️" label="Disappearing messages" sub="Off"
+          onClick={() => logTap(TARGETS.CONTACT_DISAPPEARING, 'disappearing messages')} />
+        <PanelRow icon="🛡️" label="Advanced chat privacy" sub="Off"
+          onClick={() => logTap(TARGETS.CONTACT_PRIVACY, 'advanced chat privacy')} />
+        <PanelRow icon="🔒" label="Encryption" sub="Messages are end-to-end encrypted. Click to verify." multiline
+          onClick={() => logTap(TARGETS.CONTACT_ENCRYPTION, 'encryption')} />
+
+        <div style={{ height:8, background:'#f0f2f5' }} />
+
+        <PanelRow icon={isFavorite ? '❤️' : '🤍'} label={isFavorite ? 'Remove from Favourites' : 'Add to Favourites'}
+          onClick={() => { logTap(TARGETS.CONTACT_FAVORITE, 'favourite'); onToggleFavorite && onToggleFavorite(); }} />
+
+        <div style={{ height:8, background:'#f0f2f5' }} />
+
+        <div style={{ padding:'6px 0' }}>
+          <div onClick={() => { logTap(TARGETS.CONTACT_MUTE, 'mute notifications'); onToggleMute && onToggleMute(); }}
+            style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#111b21', fontSize:15 }}
+            onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+            <span style={{ fontSize:18, width:20, textAlign:'center' }}>{isMuted ? '🔔' : '🔇'}</span>
+            {isMuted ? `Unmute ${contact.name}` : `Mute ${contact.name}`}
+          </div>
+          <div onClick={() => { logTap(TARGETS.CONTACT_BLOCK, 'block contact'); onToggleBlock && onToggleBlock(); }}
+            style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#ea0038', fontSize:15 }}
+            onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+            <span style={{ fontSize:18, width:20, textAlign:'center' }}>🚫</span>
+            {isBlocked ? `Unblock ${contact.name}` : `Block ${contact.name}`}
+          </div>
         </div>
       </div>
     </div>
