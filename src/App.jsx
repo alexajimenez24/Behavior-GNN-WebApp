@@ -192,7 +192,7 @@ export default function App() {
   const liveActiveChat = activeChat ? chats.find(c => c.id === activeChat.id) || activeChat : null;
 
   return (
-    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#111b21', overflow:'hidden' }}>
+    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#f0f2f5', overflow:'hidden' }}>
       {taskPhase === 'active' && (
         <TaskBar
           task={currentTask}

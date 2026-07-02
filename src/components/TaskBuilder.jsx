@@ -26,18 +26,18 @@ export default function TaskBuilder({ existingTasks, onAddTask, onDone, particip
   };
 
   return (
-    <div style={{ height:'100vh', background:'#111b21', display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto', padding:'20px 0' }}>
-      <div style={{ background:'#202c33', borderRadius:12, padding:'36px 44px', width:560, boxShadow:'0 8px 32px rgba(0,0,0,0.5)' }}>
+    <div style={{ height:'100vh', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto', padding:'20px 0' }}>
+      <div style={{ background:'#ffffff', borderRadius:12, padding:'36px 44px', width:560, boxShadow:'0 8px 32px rgba(0,0,0,0.12)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:6 }}>
           <div style={{ width:40, height:40, borderRadius:10, background:'#00a884', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📋</div>
           <div>
-            <div style={{ color:'#e9edef', fontWeight:600, fontSize:17 }}>Set Up Tasks</div>
-            <div style={{ color:'#8696a0', fontSize:13 }}>Participant: {participant?.participant_id}</div>
+            <div style={{ color:'#111b21', fontWeight:600, fontSize:17 }}>Set Up Tasks</div>
+            <div style={{ color:'#667781', fontSize:13 }}>Participant: {participant?.participant_id}</div>
           </div>
         </div>
-        <div style={{ height:1, background:'#2a3942', margin:'18px 0' }} />
+        <div style={{ height:1, background:'#e9edef', margin:'18px 0' }} />
 
-        {error && <div style={{ background:'#3d1a1a', color:'#ff6b6b', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:13 }}>{error}</div>}
+        {error && <div style={{ background:'#fdecea', color:'#c0392b', borderRadius:8, padding:'10px 14px', marginBottom:16, fontSize:13 }}>{error}</div>}
 
         {existingTasks.length > 0 && (
           <div style={{ marginBottom:20 }}>
@@ -46,11 +46,11 @@ export default function TaskBuilder({ existingTasks, onAddTask, onDone, particip
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:180, overflowY:'auto' }}>
               {existingTasks.map((t, i) => (
-                <div key={t.task_id} style={{ background:'#1a2530', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'flex-start', gap:10 }}>
-                  <span style={{ background:'#2a3942', color:'#8696a0', fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:6, flexShrink:0 }}>{i + 1}</span>
+                <div key={t.task_id} style={{ background:'#f0f2f5', borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'flex-start', gap:10 }}>
+                  <span style={{ background:'#e9edef', color:'#667781', fontSize:11, fontWeight:600, padding:'2px 8px', borderRadius:6, flexShrink:0 }}>{i + 1}</span>
                   <div style={{ minWidth:0 }}>
-                    <div style={{ color:'#e9edef', fontSize:14, fontWeight:500 }}>{t.task_name}</div>
-                    <div style={{ color:'#8696a0', fontSize:12, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.task_description}</div>
+                    <div style={{ color:'#111b21', fontSize:14, fontWeight:500 }}>{t.task_name}</div>
+                    <div style={{ color:'#667781', fontSize:12, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.task_description}</div>
                   </div>
                 </div>
               ))}
@@ -75,17 +75,17 @@ export default function TaskBuilder({ existingTasks, onAddTask, onDone, particip
         </div>
 
         <button onClick={addTask} style={{
-          marginTop:18, width:'100%', padding:'12px 0', background:'#2a3942', border:'1px solid #3d4f58',
-          borderRadius:8, color:'#e9edef', fontSize:14, fontWeight:600, cursor:'pointer',
+          marginTop:18, width:'100%', padding:'12px 0', background:'#f0f2f5', border:'1px solid #d1d7db',
+          borderRadius:8, color:'#111b21', fontSize:14, fontWeight:600, cursor:'pointer',
         }}>
           + Add Task
         </button>
 
         <button onClick={onDone} disabled={existingTasks.length === 0} style={{
           marginTop:10, width:'100%', padding:'13px 0',
-          background: existingTasks.length === 0 ? '#1a2530' : '#00a884',
+          background: existingTasks.length === 0 ? '#f0f2f5' : '#00a884',
           border:'none', borderRadius:8,
-          color: existingTasks.length === 0 ? '#4a5a63' : 'white',
+          color: existingTasks.length === 0 ? '#a9b2b8' : 'white',
           fontSize:15, fontWeight:600, cursor: existingTasks.length === 0 ? 'not-allowed' : 'pointer',
         }}>
           {existingTasks.length === 0 ? 'Add at least one task to continue' : `Start Session (${existingTasks.length} task${existingTasks.length === 1 ? '' : 's'}) →`}
@@ -98,13 +98,13 @@ export default function TaskBuilder({ existingTasks, onAddTask, onDone, particip
 function Field({ label, children }) {
   return (
     <div>
-      <div style={{ color:'#8696a0', fontSize:12, fontWeight:500, marginBottom:6, letterSpacing:0.4 }}>{label}</div>
+      <div style={{ color:'#667781', fontSize:12, fontWeight:500, marginBottom:6, letterSpacing:0.4 }}>{label}</div>
       {children}
     </div>
   );
 }
 
 const inputStyle = {
-  width:'100%', padding:'9px 12px', background:'#2a3942', border:'1px solid #3d4f58',
-  borderRadius:8, color:'#e9edef', fontSize:14, outline:'none', fontFamily:'inherit',
+  width:'100%', padding:'9px 12px', background:'#ffffff', border:'1px solid #d1d7db',
+  borderRadius:8, color:'#111b21', fontSize:14, outline:'none', fontFamily:'inherit',
 };
