@@ -5,6 +5,7 @@ export const SCREENS = {
   CHAT_VIEW:         'SCR_CHAT_VIEW',
   CONTACT_INFO:      'SCR_CONTACT_INFO',
   NEW_CHAT:          'SCR_NEW_CHAT',
+  NEW_GROUP:         'SCR_NEW_GROUP',
   SEARCH:            'SCR_SEARCH',
   STARRED:           'SCR_STARRED',
   SETTINGS:          'SCR_SETTINGS',
@@ -55,11 +56,15 @@ export const TARGETS = {
   NEW_CHAT_CONTACT:    'TGT_NEWCHAT_CONTACT',
   NEW_CHAT_SEARCH:     'TGT_NEWCHAT_SEARCH',
 
+  NEW_GROUP_CONTACT:    'TGT_NEWGROUP_CONTACT',
+  NEW_GROUP_NEXT:       'TGT_NEWGROUP_NEXT',
+  NEW_GROUP_NAME_INPUT: 'TGT_NEWGROUP_NAME_INPUT',
+  NEW_GROUP_CREATE:     'TGT_NEWGROUP_CREATE',
+
   HELP_BTN:            'TGT_HELP_BTN',
   TASK_DONE_BTN:       'TGT_TASK_DONE',
   NEXT_TASK_BTN:       'TGT_NEXT_TASK',
 
-  // Chat header "more options" (⋮) menu
   CHAT_MORE_BTN:          'TGT_CHAT_MORE_BTN',
   CHAT_MENU_INFO:         'TGT_CHAT_MENU_INFO',
   CHAT_MENU_SEARCH:       'TGT_CHAT_MENU_SEARCH',
@@ -72,7 +77,6 @@ export const TARGETS = {
   CHAT_MENU_CLEAR:        'TGT_CHAT_MENU_CLEAR',
   CHAT_MENU_DELETE:       'TGT_CHAT_MENU_DELETE',
 
-  // Sidebar "⋮" menu
   SIDEBAR_MENU_NEW_GROUP:     'TGT_SB_NEW_GROUP',
   SIDEBAR_MENU_ARCHIVED:      'TGT_SB_ARCHIVED',
   SIDEBAR_MENU_SELECT_CHATS:  'TGT_SB_SELECT_CHATS',
@@ -80,7 +84,6 @@ export const TARGETS = {
   SIDEBAR_MENU_APP_LOCK:      'TGT_SB_APP_LOCK',
   SIDEBAR_MENU_LOGOUT:        'TGT_SB_LOGOUT',
 
-  // Attach (+) popup
   ATTACH_MENU_DOC:     'TGT_ATTACH_DOC',
   ATTACH_MENU_PHOTOS:  'TGT_ATTACH_PHOTOS',
   ATTACH_MENU_CAMERA:  'TGT_ATTACH_CAMERA',
@@ -99,6 +102,27 @@ export const CONTACTS = [
   { id: 'C07', name: 'Grace Kim',       avatar: 'GK', color: '#B869FF', phone: '+1 312 555 0107' },
   { id: 'C08', name: 'Henry Brown',     avatar: 'HB', color: '#FF6969', phone: '+1 312 555 0108' },
 ];
+
+export function getChatContact(chat) {
+  if (!chat) return null;
+  if (chat.isGroup) {
+    return {
+      id: chat.id,
+      name: chat.groupName || 'Group',
+      avatar: chat.groupAvatar || '👥',
+      color: '#8696A0',
+      phone: `${chat.members?.length || 0} members`,
+      isGroup: true,
+      members: chat.members || [],
+    };
+  }
+  return CONTACTS.find(c => c.id === chat.contactId);
+}
+
+export function getChatFavKey(chat) {
+  if (!chat) return null;
+  return chat.isGroup ? chat.id : chat.contactId;
+}
 
 const now = Date.now();
 const m = (mins) => now - mins * 60000;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CONTACTS, CHATS } from '../data';
+import { CONTACTS, CHATS, getChatContact, getChatFavKey } from '../data';
 import { SCREENS, TARGETS } from '../data';
 
 function formatTime(ts) {
@@ -20,6 +20,22 @@ function Avatar({ contact, size = 48 }) {
     }}>
       {contact.avatar}
     </div>
+  );
+}
+
+function HighlightedSnippet({ text, query, sender }) {
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) {
+    return <>{sender ? `${sender}: ` : ''}{text}</>;
+  }
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + query.length);
+  const after = text.slice(idx + query.length);
+  return (
+    <span>
+      {sender && <span style={{ color:'#3b4a54' }}>{sender}: </span>}
+      {before}<span style={{ color:'#00a884', fontWeight:700 }}>{match}</span>{after}
+    </span>
   );
 }
 
@@ -111,7 +127,11 @@ function IconRail({ currentScreen, onNavigate, onLog, unreadCount }) {
   );
 }
 
-export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNavigate, onLog, searchQuery, setSearchQuery, chats, onLogout }) {
+export default function Sidebar({
+  currentScreen, activeChat, onSelectChat, onNavigate, onLog,
+  searchQuery, setSearchQuery, chats, onLogout, onCreateGroup,
+  favoriteContacts,
+}) {
   const [showMenu, setShowMenu] = useState(false);
   const [tab, setTab] = useState('all');
   const [readChats, setReadChats] = useState(new Set());
@@ -119,27 +139,34 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
   const [selectMode, setSelectMode] = useState(false);
   const [selectedChats, setSelectedChats] = useState(new Set());
 
+  const [groupStep, setGroupStep] = useState('select');  
+  const [groupSelected, setGroupSelected] = useState(new Set());
+  const [groupName, setGroupName] = useState('');
+
   const liveChats = chats || CHATS;
+  const favSet = favoriteContacts || new Set();
 
   const isSearch = currentScreen === SCREENS.SEARCH;
   const isNewChat = currentScreen === SCREENS.NEW_CHAT;
-  const isArchived = viewingArchived && !isSearch && !isNewChat;
+  const isNewGroup = currentScreen === SCREENS.NEW_GROUP;
+  const isArchived = viewingArchived && !isSearch && !isNewChat && !isNewGroup;
 
-  const getContact = (contactId) => CONTACTS.find(c => c.id === contactId);
   const getLastMsg = (chat) => chat.messages[chat.messages.length - 1];
-
   const isUnread = (chat) => !readChats.has(chat.id);
+  const isFavoriteChat = (chat) => favSet.has(getChatFavKey(chat));
 
   const filteredChats = isArchived ? [] : liveChats.filter(chat => {
-    const contact = getContact(chat.contactId);
+    const contact = getChatContact(chat);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       if (!contact.name.toLowerCase().includes(q) &&
           !chat.messages.some(m => m.text.toLowerCase().includes(q))) return false;
     }
-    if (tab === 'unread') return isUnread(chat);
-    if (tab === 'favourites') return false;
-    if (tab === 'groups') return false;
+    if (!isSearch) {
+      if (tab === 'unread') return isUnread(chat);
+      if (tab === 'favourites') return isFavoriteChat(chat);
+      if (tab === 'groups') return !!chat.isGroup;
+    }
     return true;
   });
 
@@ -153,7 +180,7 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
     onNavigate(SCREENS.NEW_CHAT);
   };
 
-  const handleChatSelect = (chat) => {
+  const handleChatSelect = (chat, highlightMessageId = null) => {
     if (selectMode) {
       setSelectedChats(prev => {
         const next = new Set(prev);
@@ -163,8 +190,16 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
       return;
     }
     setReadChats(prev => new Set([...prev, chat.id]));
-    onLog({ screen_id: currentScreen, action_type: 'tap', target_id: `${TARGETS.CHAT_ITEM}_${chat.id}`, target_label: getContact(chat.contactId).name, next_screen_id: SCREENS.CHAT_VIEW });
-    onSelectChat(chat);
+    const label = getChatContact(chat).name;
+    onLog({
+      screen_id: currentScreen,
+      action_type: 'tap',
+      target_id: isSearch ? `${TARGETS.SEARCH_RESULT}_${chat.id}` : `${TARGETS.CHAT_ITEM}_${chat.id}`,
+      target_label: label,
+      next_screen_id: SCREENS.CHAT_VIEW,
+    });
+    onSelectChat(chat, false, highlightMessageId);
+    if (isSearch) setSearchQuery('');
   };
 
   const handleContactSelect = (contact) => {
@@ -174,10 +209,43 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
     onSelectChat(existingChat || { id: `CH_NEW_${contact.id}`, contactId: contact.id, messages: [] }, true);
   };
 
+  const toggleGroupMember = (contactId) => {
+    onLog({ screen_id: SCREENS.NEW_GROUP, action_type: 'tap', target_id: TARGETS.NEW_GROUP_CONTACT, target_label: CONTACTS.find(c => c.id === contactId)?.name });
+    setGroupSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(contactId)) next.delete(contactId); else next.add(contactId);
+      return next;
+    });
+  };
+
+  const handleGroupNext = () => {
+    onLog({ screen_id: SCREENS.NEW_GROUP, action_type: 'tap', target_id: TARGETS.NEW_GROUP_NEXT, target_label: 'next' });
+    setGroupStep('details');
+    setSearchQuery('');
+  };
+
+  const handleCreateGroup = () => {
+    const memberIds = [...groupSelected];
+    const defaultName = CONTACTS.filter(c => memberIds.includes(c.id)).map(c => c.name.split(' ')[0]).slice(0, 3).join(', ') || 'New Group';
+    const name = groupName.trim() || defaultName;
+    onLog({ screen_id: SCREENS.NEW_GROUP, action_type: 'tap', target_id: TARGETS.NEW_GROUP_CREATE, target_label: name });
+    const newGroup = onCreateGroup && onCreateGroup(memberIds, name);
+    setGroupSelected(new Set());
+    setGroupName('');
+    setGroupStep('select');
+    if (newGroup) {
+      setReadChats(prev => new Set([...prev, newGroup.id]));
+      onSelectChat(newGroup, true);
+    }
+  };
+
   const unreadCount = liveChats.filter(c => isUnread(c)).length;
 
   const sidebarMenuItems = [
-    { label:'New group', id: TARGETS.SIDEBAR_MENU_NEW_GROUP, action: () => onNavigate(SCREENS.NEW_CHAT) },
+    { label:'New group', id: TARGETS.SIDEBAR_MENU_NEW_GROUP, action: () => {
+        setGroupStep('select'); setGroupSelected(new Set()); setGroupName(''); setSearchQuery('');
+        onNavigate(SCREENS.NEW_GROUP);
+      } },
     { label:'Archived', id: TARGETS.SIDEBAR_MENU_ARCHIVED, action: () => setViewingArchived(true) },
     { label:'Starred messages', id: TARGETS.NAV_STARRED, action: () => onNavigate(SCREENS.STARRED) },
     { label:'Select chats', id: TARGETS.SIDEBAR_MENU_SELECT_CHATS, action: () => { setSelectMode(v => !v); setSelectedChats(new Set()); } },
@@ -193,17 +261,23 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
 
       <div style={{ width:412, background:'#ffffff', borderRight:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', flexShrink:0, overflow:'hidden' }}>
         <div style={{ padding:'12px 16px', background:'#ffffff', borderBottom:'1px solid #e9edef', display:'flex', alignItems:'center', justifyContent:'space-between', minHeight:60, flexShrink:0 }}>
-          {isSearch || isNewChat || isArchived ? (
+          {isSearch || isNewChat || isArchived || isNewGroup ? (
             <div style={{ display:'flex', alignItems:'center', gap:12, flex:1 }}>
               <button onClick={() => {
                   if (isArchived) { setViewingArchived(false); return; }
+                  if (isNewGroup) {
+                    if (groupStep === 'details') { setGroupStep('select'); return; }
+                    setGroupSelected(new Set()); setGroupName('');
+                    onNavigate(SCREENS.CHAT_LIST); setSearchQuery('');
+                    return;
+                  }
                   onNavigate(SCREENS.CHAT_LIST); setSearchQuery('');
                 }}
                 style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', padding:'4px 8px 4px 0', fontSize:20, lineHeight:1 }}>
                 ←
               </button>
               <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>
-                {isSearch ? 'Search' : isNewChat ? 'New Chat' : 'Archived'}
+                {isSearch ? 'Search' : isNewChat ? 'New Chat' : isArchived ? 'Archived' : (groupStep === 'select' ? 'Add group participants' : 'New group')}
               </span>
             </div>
           ) : selectMode ? (
@@ -252,7 +326,7 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           )}
         </div>
 
-        {!isArchived && (
+        {!isArchived && !(isNewGroup && groupStep === 'details') && (
           <div style={{ padding:'8px 12px', background:'#ffffff', flexShrink:0 }}>
             <div style={{ background:'#f0f2f5', borderRadius:8, display:'flex', alignItems:'center', gap:8, padding:'8px 12px' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -263,9 +337,9 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
                   onLog({ screen_id: currentScreen, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'search field' });
                 }}
                 onFocus={() => {
-                  if (currentScreen !== SCREENS.SEARCH && currentScreen !== SCREENS.NEW_CHAT) handleSearchClick();
+                  if (currentScreen !== SCREENS.SEARCH && currentScreen !== SCREENS.NEW_CHAT && currentScreen !== SCREENS.NEW_GROUP) handleSearchClick();
                 }}
-                placeholder={isNewChat ? 'Search contacts' : 'Search or start new chat'}
+                placeholder={isNewChat || isNewGroup ? 'Search contacts' : 'Search or start new chat'}
                 style={{ background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, flex:1, fontFamily:'inherit' }}
               />
               {searchQuery && (
@@ -275,7 +349,7 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           </div>
         )}
 
-        {!isSearch && !isNewChat && !isArchived && (
+        {!isSearch && !isNewChat && !isArchived && !isNewGroup && (
           <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 12px 10px', background:'#ffffff', flexShrink:0 }}>
             {[
               { key:'all',        label:'All' },
@@ -323,6 +397,98 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           </div>
         )}
 
+        {isNewGroup && groupStep === 'select' && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            {groupSelected.size > 0 && (
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', padding:'10px 16px', borderBottom:'1px solid #e9edef', maxHeight:100, overflowY:'auto' }}>
+                {[...groupSelected].map(id => {
+                  const c = CONTACTS.find(x => x.id === id);
+                  if (!c) return null;
+                  return (
+                    <div key={id} style={{ display:'flex', alignItems:'center', gap:6, background:'#f0f2f5', borderRadius:16, padding:'4px 8px 4px 4px' }}>
+                      <div style={{ width:22, height:22, borderRadius:'50%', background:c.color+'33', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:600, color:c.color }}>{c.avatar}</div>
+                      <span style={{ fontSize:12, color:'#111b21' }}>{c.name.split(' ')[0]}</span>
+                      <span onClick={() => toggleGroupMember(id)} style={{ cursor:'pointer', color:'#667781', fontSize:14 }}>×</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div style={{ flex:1, overflowY:'auto' }}>
+              <div style={{ padding:'6px 16px 4px', color:'#00a884', fontSize:13, fontWeight:600 }}>CONTACTS ON WHATSAPP</div>
+              {CONTACTS
+                .filter(c => !searchQuery || c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                .map(contact => {
+                  const checked = groupSelected.has(contact.id);
+                  return (
+                    <div key={contact.id} onClick={() => toggleGroupMember(contact.id)}
+                      style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', cursor:'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+                      onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                      <Avatar contact={contact} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ color:'#111b21', fontSize:15, fontWeight:400 }}>{contact.name}</div>
+                        <div style={{ color:'#667781', fontSize:13 }}>{contact.phone}</div>
+                      </div>
+                      <div style={{
+                        width:22, height:22, borderRadius:'50%', flexShrink:0,
+                        border: checked ? 'none' : '2px solid #b3bbc0',
+                        background: checked ? '#00a884' : 'transparent',
+                        display:'flex', alignItems:'center', justifyContent:'center', color:'#ffffff', fontSize:12,
+                      }}>
+                        {checked ? '✓' : ''}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+            {groupSelected.size > 0 && (
+              <div style={{ padding:'12px 16px', borderTop:'1px solid #e9edef' }}>
+                <button onClick={handleGroupNext} style={{ width:'100%', padding:'12px 0', background:'#00a884', border:'none', borderRadius:8, color:'#ffffff', fontSize:14, fontWeight:600, cursor:'pointer' }}>
+                  Next ({groupSelected.size} selected) →
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isNewGroup && groupStep === 'details' && (
+          <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+            <div style={{ padding:'24px 20px', display:'flex', alignItems:'center', gap:16 }}>
+              <div style={{ width:64, height:64, borderRadius:'50%', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, flexShrink:0 }}>👥</div>
+              <input
+                value={groupName}
+                onChange={e => {
+                  setGroupName(e.target.value);
+                  onLog({ screen_id: SCREENS.NEW_GROUP, action_type:'text_input', target_id: TARGETS.NEW_GROUP_NAME_INPUT, target_label:'group name' });
+                }}
+                placeholder="Group name (optional)"
+                style={{ flex:1, border:'none', borderBottom:'1px solid #d1d7db', outline:'none', fontSize:16, padding:'8px 4px', fontFamily:'inherit', color:'#111b21' }}
+              />
+            </div>
+            <div style={{ padding:'0 20px 8px', color:'#667781', fontSize:13, fontWeight:600 }}>
+              PARTICIPANTS: {groupSelected.size}
+            </div>
+            <div style={{ flex:1, overflowY:'auto', padding:'0 8px' }}>
+              {[...groupSelected].map(id => {
+                const c = CONTACTS.find(x => x.id === id);
+                if (!c) return null;
+                return (
+                  <div key={id} style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 12px' }}>
+                    <Avatar contact={c} size={40} />
+                    <span style={{ color:'#111b21', fontSize:14 }}>{c.name}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ padding:'12px 16px', borderTop:'1px solid #e9edef' }}>
+              <button onClick={handleCreateGroup} style={{ width:'100%', padding:'13px 0', background:'#00a884', border:'none', borderRadius:8, color:'#ffffff', fontSize:15, fontWeight:600, cursor:'pointer' }}>
+                Create Group →
+              </button>
+            </div>
+          </div>
+        )}
+
         {isArchived && (
           <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}>
             <div style={{ textAlign:'center', color:'#667781', fontSize:14, padding:'40px 20px' }}>
@@ -332,24 +498,43 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
           </div>
         )}
 
-        {!isNewChat && !isArchived && (
+        {!isNewChat && !isArchived && !isNewGroup && (
           <div style={{ flex:1, overflowY:'auto' }}>
             {filteredChats.length === 0 && (
               <div style={{ textAlign:'center', color:'#667781', fontSize:14, padding:'40px 20px' }}>
-                {tab === 'unread' && 'No unread chats'}
-                {tab === 'favourites' && 'No favourite chats yet'}
-                {tab === 'groups' && 'No group chats yet'}
-                {tab === 'all' && 'No chats found'}
+                {isSearch ? (searchQuery ? 'No results found' : 'Search by name or keyword') :
+                  tab === 'unread' ? 'No unread chats' :
+                  tab === 'favourites' ? 'No favourite chats yet' :
+                  tab === 'groups' ? 'No group chats yet' : 'No chats found'}
               </div>
             )}
             {filteredChats.map(chat => {
-              const contact = getContact(chat.contactId);
+              const contact = getChatContact(chat);
               const last = getLastMsg(chat);
               const isActive = activeChat?.id === chat.id;
               const unread = isUnread(chat);
               const isSelected = selectedChats.has(chat.id);
+              const isFav = isFavoriteChat(chat);
+
+              let matchedMessageId = null;
+              let bodyContent = last
+                ? (last.from === 'me' ? <><span style={{ color:'#3b4a54' }}>You: </span>{last.text}</> : last.text)
+                : 'No messages yet';
+
+              if (isSearch && searchQuery) {
+                const q = searchQuery.toLowerCase();
+                const nameMatches = contact.name.toLowerCase().includes(q);
+                if (!nameMatches) {
+                  const matchedMsg = chat.messages.find(m => m.text.toLowerCase().includes(q));
+                  if (matchedMsg) {
+                    matchedMessageId = matchedMsg.id;
+                    bodyContent = <HighlightedSnippet text={matchedMsg.text} query={searchQuery} sender={matchedMsg.from === 'me' ? 'You' : contact.name} />;
+                  }
+                }
+              }
+
               return (
-                <div key={chat.id} onClick={() => handleChatSelect(chat)}
+                <div key={chat.id} onClick={() => handleChatSelect(chat, matchedMessageId)}
                   style={{
                     display:'flex', alignItems:'center', gap:14, padding:'12px 16px',
                     cursor:'pointer', background: isSelected ? '#e7f8f3' : (isActive ? '#f0f2f5' : 'transparent'),
@@ -370,20 +555,19 @@ export default function Sidebar({ currentScreen, activeChat, onSelectChat, onNav
                   <Avatar contact={contact} />
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                      <span style={{ color:'#111b21', fontSize:15, fontWeight: unread ? 600 : 400 }}>{contact.name}</span>
+                      <span style={{ display:'flex', alignItems:'center', gap:5, color:'#111b21', fontSize:15, fontWeight: unread ? 600 : 400 }}>
+                        {contact.name}
+                        {isFav && !isSearch && <span style={{ fontSize:11 }}>❤️</span>}
+                      </span>
                       <span style={{ color: unread ? '#00a884' : '#667781', fontSize:12, flexShrink:0 }}>
                         {last ? formatTime(last.time) : ''}
                       </span>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <div style={{ color:'#667781', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1 }}>
-                        {last
-                          ? (last.from === 'me'
-                              ? <><span style={{ color:'#3b4a54' }}>You: </span>{last.text}</>
-                              : last.text)
-                          : 'No messages yet'}
+                        {bodyContent}
                       </div>
-                      {unread && !selectMode && (
+                      {unread && !selectMode && !isSearch && (
                         <div style={{ width:9, height:9, borderRadius:'50%', background:'#00a884', flexShrink:0, marginLeft:8 }} />
                       )}
                     </div>

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CONTACTS, CHATS } from '../data';
+import { CONTACTS, CHATS, getChatContact } from '../data';
 import { SCREENS, TARGETS } from '../data';
 
 function formatTime(ts) {
@@ -24,6 +24,8 @@ export default function ChatView({
   isMuted, isBlocked, isFavorite,
   onToggleMute, onToggleBlock, onToggleFavorite,
   onClearChat, onDeleteChat,
+  highlightMessageId,
+  chatSearchOpen, onOpenChatSearch, onCloseChatSearch,
 }) {
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -34,11 +36,81 @@ export default function ChatView({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [attachAccept, setAttachAccept] = useState('*/*');
   const [messages, setMessages] = useState(chat.messages);
+  const [flashId, setFlashId] = useState(null);
+  const [chatSearchQuery, setChatSearchQuery] = useState('');
+  const [chatMatchIndex, setChatMatchIndex] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const chatSearchInputRef = useRef(null);
 
-  const contact = CONTACTS.find(c => c.id === chat.contactId);
+  const contact = getChatContact(chat);
+
+
+  const chatSearchMatches = React.useMemo(() => {
+    if (!chatSearchQuery.trim()) return [];
+    const q = chatSearchQuery.toLowerCase();
+    return messages.filter(m => m.text.toLowerCase().includes(q)).slice().reverse();
+  }, [messages, chatSearchQuery]);
+
+  useEffect(() => {
+    setChatMatchIndex(0);
+  }, [chatSearchQuery, chat.id]);
+
+  useEffect(() => {
+    if (!chatSearchOpen) {
+      setChatSearchQuery('');
+      setChatMatchIndex(0);
+    } else {
+      setTimeout(() => chatSearchInputRef.current?.focus(), 0);
+    }
+  }, [chatSearchOpen, chat.id]);
+
+  useEffect(() => {
+    if (!chatSearchOpen || chatSearchMatches.length === 0) return;
+    const msg = chatSearchMatches[chatMatchIndex];
+    if (!msg) return;
+    const el = document.getElementById(msg.id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setFlashId(msg.id);
+      setTimeout(() => setFlashId(null), 1200);
+    }
+  }, [chatMatchIndex, chatSearchMatches, chatSearchOpen]);
+
+  const goToOlderMatch = () => {
+    if (chatSearchMatches.length === 0) return;
+    setChatMatchIndex(i => (i + 1) % chatSearchMatches.length);
+  };
+  const goToNewerMatch = () => {
+    if (chatSearchMatches.length === 0) return;
+    setChatMatchIndex(i => (i - 1 + chatSearchMatches.length) % chatSearchMatches.length);
+  };
+
+  const handleOpenChatSearch = () => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.CHAT_MENU_SEARCH, target_label: 'search in chat' });
+    onOpenChatSearch && onOpenChatSearch();
+  };
+
+  const handleCloseChatSearch = () => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.BACK_BUTTON, target_label: 'close chat search' });
+    onCloseChatSearch && onCloseChatSearch();
+  };
+
+  function renderMessageText(msg) {
+    if (!chatSearchOpen || !chatSearchQuery.trim()) return msg.text;
+    const q = chatSearchQuery.toLowerCase();
+    const idx = msg.text.toLowerCase().indexOf(q);
+    if (idx === -1) return msg.text;
+    const before = msg.text.slice(0, idx);
+    const match = msg.text.slice(idx, idx + chatSearchQuery.length);
+    const after = msg.text.slice(idx + chatSearchQuery.length);
+    return (
+      <>
+        {before}<span style={{ background:'#fff3b0', color:'#111b21', borderRadius:2 }}>{match}</span>{after}
+      </>
+    );
+  }
 
   useEffect(() => {
     setMessages(chat.messages);
@@ -50,6 +122,20 @@ export default function ChatView({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior:'smooth' });
   }, [messages]);
+
+
+  useEffect(() => {
+    if (!highlightMessageId) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(highlightMessageId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setFlashId(highlightMessageId);
+        setTimeout(() => setFlashId(null), 2000);
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [highlightMessageId, chat.id]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -110,7 +196,6 @@ export default function ChatView({
     onNavigate(SCREENS.CHAT_LIST);
   };
 
-  // ---- Attach (+) menu ----
   const handleAttachClick = () => {
     onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.ATTACH_BTN, target_label: 'attach' });
     setShowMoreMenu(false);
@@ -150,14 +235,13 @@ export default function ChatView({
     { label:'Poll',           color:'#e3a13f', icon:'📊', target: TARGETS.ATTACH_MENU_POLL,    stub:true },
   ];
 
-  // ---- Header "more options" (⋮) menu ----
   const closeMoreMenu = () => setShowMoreMenu(false);
 
   const moreMenuItems = [
     { label:'Contact info', target: TARGETS.CHAT_MENU_INFO,
       action: () => onOpenContactPanel && onOpenContactPanel() },
     { label:'Search', target: TARGETS.CHAT_MENU_SEARCH,
-      action: () => onNavigate(SCREENS.SEARCH) },
+      action: () => onOpenChatSearch && onOpenChatSearch() },
     { label:'Select messages', target: TARGETS.CHAT_MENU_SELECT,
       action: () => {} },
     { label: isMuted ? 'Unmute notifications' : 'Mute notifications', target: TARGETS.CONTACT_MUTE, arrow:true,
@@ -195,6 +279,44 @@ export default function ChatView({
     <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#efeae2', position:'relative', overflow:'hidden' }}>
       <div style={{ position:'absolute', inset:0, opacity:0.06, backgroundImage:`url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23111b21' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`, zIndex:0 }} />
 
+      {chatSearchOpen ? (
+        <div style={{ background:'#f0f2f5', padding:'0 16px', display:'flex', alignItems:'center', gap:10, minHeight:60, zIndex:10, borderBottom:'1px solid #e9edef' }}>
+          <button onClick={handleCloseChatSearch} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:22, padding:'4px 8px 4px 0', lineHeight:1 }}>←</button>
+          <div style={{ flex:1, background:'#ffffff', borderRadius:8, display:'flex', alignItems:'center', gap:8, padding:'8px 12px' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input
+              ref={chatSearchInputRef}
+              value={chatSearchQuery}
+              onChange={e => {
+                setChatSearchQuery(e.target.value);
+                onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'in-chat search field' });
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.shiftKey ? goToNewerMatch() : goToOlderMatch(); }
+                if (e.key === 'Escape') handleCloseChatSearch();
+              }}
+              placeholder={`Search in ${contact.name}'s chat`}
+              style={{ flex:1, background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, fontFamily:'inherit' }}
+            />
+            {chatSearchQuery && (
+              <button onClick={() => setChatSearchQuery('')} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:18, lineHeight:1 }}>×</button>
+            )}
+          </div>
+          {chatSearchQuery.trim() && (
+            <div style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
+              <span style={{ color:'#667781', fontSize:12, minWidth:44, textAlign:'center' }}>
+                {chatSearchMatches.length === 0 ? '0/0' : `${chatMatchIndex + 1}/${chatSearchMatches.length}`}
+              </span>
+              <IconBtn title="Older match" onClick={goToOlderMatch}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+              </IconBtn>
+              <IconBtn title="Newer match" onClick={goToNewerMatch}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              </IconBtn>
+            </div>
+          )}
+        </div>
+      ) : (
       <div style={{ background:'#f0f2f5', padding:'0 16px', display:'flex', alignItems:'center', gap:12, minHeight:60, zIndex:10, borderBottom:'1px solid #e9edef' }}>
         <button onClick={handleBack} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:22, padding:'4px 8px 4px 0', lineHeight:1 }}>←</button>
         <div onClick={handleContactHeader} style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer', flex:1 }}>
@@ -202,13 +324,13 @@ export default function ChatView({
           <div>
             <div style={{ color:'#111b21', fontSize:15, fontWeight:400 }}>{contact.name}</div>
             <div style={{ color:'#667781', fontSize:13 }}>
-              {isBlocked ? 'blocked' : 'online'}{isMuted ? ' · muted' : ''}
+              {contact.isGroup ? contact.phone : (isBlocked ? 'blocked' : 'online')}{isMuted ? ' · muted' : ''}
             </div>
           </div>
         </div>
         <div style={{ display:'flex', gap:4 }}>
           <IconBtn title="Video call"><svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg></IconBtn>
-          <IconBtn title="Search in chat" onClick={() => onNavigate(SCREENS.SEARCH)}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></IconBtn>
+          <IconBtn title="Search in chat" onClick={handleOpenChatSearch}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></IconBtn>
           <div style={{ position:'relative' }}>
             <IconBtn title="More options" onClick={() => { onLog({ screen_id: SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.CHAT_MORE_BTN, target_label:'more options' }); setShowAttachMenu(false); setShowMoreMenu(v => !v); }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
@@ -232,6 +354,7 @@ export default function ChatView({
           </div>
         </div>
       </div>
+      )}
 
       <div onScroll={handleScroll} style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}>
         <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:'100%' }}>
@@ -241,7 +364,11 @@ export default function ChatView({
             const isHovered = hoveredMsg === msg.id;
             const menuOpen = showMsgMenu === msg.id;
             return (
-              <div key={msg.id} style={{ display:'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom:4, position:'relative' }}
+              <div key={msg.id} id={msg.id} style={{
+                  display:'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom:4, position:'relative',
+                  background: flashId === msg.id ? 'rgba(0,168,132,0.16)' : 'transparent',
+                  borderRadius:10, transition:'background 0.4s',
+                }}
                 onMouseEnter={() => setHoveredMsg(msg.id)}
                 onMouseLeave={() => { setHoveredMsg(null); if (!menuOpen) setShowMsgMenu(null); }}>
 
@@ -269,7 +396,7 @@ export default function ChatView({
                     {msg.attachment?.isImage && (
                       <img src={msg.attachment.url} alt={msg.attachment.name} style={{ maxWidth:260, maxHeight:260, borderRadius:8, display:'block', marginBottom:4, objectFit:'cover' }} />
                     )}
-                    <span style={{ color:'#111b21', fontSize:14, fontWeight:400, lineHeight:1.5, wordBreak:'break-word' }}>{msg.text}</span>
+                    <span style={{ color:'#111b21', fontSize:14, fontWeight:400, lineHeight:1.5, wordBreak:'break-word' }}>{renderMessageText(msg)}</span>
                     <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:4, marginTop:2 }}>
                       {msg.starred && <span style={{ fontSize:10 }}>⭐</span>}
                       <span style={{ color:'#667781', fontSize:11 }}>{formatTime(msg.time)}</span>
@@ -313,7 +440,6 @@ export default function ChatView({
         </div>
       )}
 
-      {/* Hidden native file input used by the attach popup */}
       <input ref={fileInputRef} type="file" accept={attachAccept} style={{ display:'none' }} onChange={handleFileChosen} />
 
       <div style={{ background:'#f0f2f5', padding:'8px 12px 10px', zIndex:10, position:'relative' }}>
@@ -336,7 +462,11 @@ export default function ChatView({
 
         <div style={{ display:'flex', alignItems:'center', gap:0, background:'#ffffff', borderRadius:24, padding:'4px 6px', boxShadow:'0 1px 3px rgba(11,20,26,0.10)' }}>
           <IconBtn title="Attach" onClick={handleAttachClick}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f" style={{ transform: showAttachMenu ? 'rotate(45deg)' : 'none', transition:'transform 0.15s' }}><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM11 12h2V9h3V7h-3V4h-2v3H8v2h3v3z"/></svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"
+              style={{ transform: showAttachMenu ? 'rotate(45deg)' : 'none', transition:'transform 0.15s' }}>
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
           </IconBtn>
           <IconBtn title="Emoji" onClick={() => { setShowAttachMenu(false); onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.EMOJI_BTN, target_label:'emoji' }); }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="#54656f"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>

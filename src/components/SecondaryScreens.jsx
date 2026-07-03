@@ -1,5 +1,5 @@
 import React from 'react';
-import { CONTACTS } from '../data';
+import { CONTACTS, getChatContact } from '../data';
 import { SCREENS, TARGETS } from '../data';
 
 function Header({ title, onBack, onLog, currentScreen }) {
@@ -12,7 +12,6 @@ function Header({ title, onBack, onLog, currentScreen }) {
   );
 }
 
-// A toggle switch matching WhatsApp's style
 function Switch({ checked, onChange }) {
   return (
     <div onClick={onChange} role="switch" aria-checked={checked} style={{
@@ -52,25 +51,26 @@ function PanelToggleRow({ icon, label, value, onToggle }) {
   );
 }
 
-// Real WhatsApp-style contact info panel, rendered as a fixed-width side panel
-// alongside the chat (not a full-screen takeover).
 export function ContactInfo({
   chat, onClose, onLog,
   isMuted = false, isBlocked = false, isFavorite = false,
   onToggleMute, onToggleBlock, onToggleFavorite,
+  onOpenChatSearch,
 }) {
   if (!chat) return null;
-  const contact = CONTACTS.find(c => c.id === chat.contactId);
+  const contact = getChatContact(chat);
+  if (!contact) return null;
   const currentScreen = SCREENS.CONTACT_INFO;
+  const isGroup = !!contact.isGroup;
 
   const logTap = (target_id, label) => onLog({ screen_id: currentScreen, action_type:'tap', target_id, target_label:label });
 
   return (
     <div style={{ width:400, flexShrink:0, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
       <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
-        <button onClick={() => { logTap(TARGETS.CONTACT_PANEL_CLOSE, 'close contact info'); onClose(); }}
+        <button onClick={() => { logTap(TARGETS.CONTACT_PANEL_CLOSE, isGroup ? 'close group info' : 'close contact info'); onClose(); }}
           style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
-        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>Contact info</span>
+        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>{isGroup ? 'Group info' : 'Contact info'}</span>
       </div>
 
       <div style={{ flex:1, overflowY:'auto' }}>
@@ -79,7 +79,7 @@ export function ContactInfo({
           <div style={{ color:'#111b21', fontSize:20, fontWeight:400 }}>{contact.name}</div>
           <div style={{ color:'#667781', fontSize:14, marginTop:4 }}>{contact.phone}</div>
 
-          <button onClick={() => { logTap(TARGETS.CONTACT_SEARCH, 'search in chat'); }}
+          <button onClick={() => { logTap(TARGETS.CONTACT_SEARCH, 'search in chat'); onOpenChatSearch && onOpenChatSearch(); }}
             style={{ marginTop:20, width:52, height:52, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
             onMouseEnter={e => e.currentTarget.style.background='#e9edef'}
             onMouseLeave={e => e.currentTarget.style.background='#f0f2f5'}>
@@ -89,6 +89,28 @@ export function ContactInfo({
         </div>
 
         <div style={{ height:8, background:'#f0f2f5' }} />
+
+        {isGroup && (
+          <>
+            <div style={{ padding:'6px 24px 10px', color:'#00a884', fontSize:12, fontWeight:600, letterSpacing:0.4 }}>
+              {contact.members.length} PARTICIPANT{contact.members.length === 1 ? '' : 'S'}
+            </div>
+            {contact.members.map(memberId => {
+              const member = CONTACTS.find(c => c.id === memberId);
+              if (!member) return null;
+              return (
+                <div key={memberId} style={{ display:'flex', alignItems:'center', gap:16, padding:'8px 24px' }}>
+                  <div style={{ width:36, height:36, borderRadius:'50%', background:member.color+'33', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:600, color:member.color, flexShrink:0 }}>{member.avatar}</div>
+                  <div>
+                    <div style={{ color:'#111b21', fontSize:14 }}>{member.name}</div>
+                    <div style={{ color:'#667781', fontSize:12 }}>{member.phone}</div>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ height:8, background:'#f0f2f5', marginTop:12 }} />
+          </>
+        )}
 
         <PanelRow icon="🗂️" label="Media, links, and docs" trailing={chat.messages.filter(m => m.attachment).length}
           onClick={() => logTap(TARGETS.CONTACT_MEDIA_TAB, 'media tab')} />
@@ -112,22 +134,36 @@ export function ContactInfo({
 
         <div style={{ height:8, background:'#f0f2f5' }} />
 
-        <div style={{ padding:'6px 0' }}>
-          <div onClick={() => { logTap(TARGETS.CONTACT_MUTE, 'mute notifications'); onToggleMute && onToggleMute(); }}
-            style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#111b21', fontSize:15 }}
-            onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-            <span style={{ fontSize:18, width:20, textAlign:'center' }}>{isMuted ? '🔔' : '🔇'}</span>
-            {isMuted ? `Unmute ${contact.name}` : `Mute ${contact.name}`}
+        {!isGroup && (
+          <div style={{ padding:'6px 0' }}>
+            <div onClick={() => { logTap(TARGETS.CONTACT_MUTE, 'mute notifications'); onToggleMute && onToggleMute(); }}
+              style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#111b21', fontSize:15 }}
+              onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+              <span style={{ fontSize:18, width:20, textAlign:'center' }}>{isMuted ? '🔔' : '🔇'}</span>
+              {isMuted ? `Unmute ${contact.name}` : `Mute ${contact.name}`}
+            </div>
+            <div onClick={() => { logTap(TARGETS.CONTACT_BLOCK, 'block contact'); onToggleBlock && onToggleBlock(); }}
+              style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#ea0038', fontSize:15 }}
+              onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+              <span style={{ fontSize:18, width:20, textAlign:'center' }}>🚫</span>
+              {isBlocked ? `Unblock ${contact.name}` : `Block ${contact.name}`}
+            </div>
           </div>
-          <div onClick={() => { logTap(TARGETS.CONTACT_BLOCK, 'block contact'); onToggleBlock && onToggleBlock(); }}
-            style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#ea0038', fontSize:15 }}
-            onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
-            onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-            <span style={{ fontSize:18, width:20, textAlign:'center' }}>🚫</span>
-            {isBlocked ? `Unblock ${contact.name}` : `Block ${contact.name}`}
+        )}
+
+        {isGroup && (
+          <div style={{ padding:'6px 0' }}>
+            <div onClick={() => { logTap(TARGETS.CHAT_MENU_CLOSE_CHAT, 'exit group'); }}
+              style={{ display:'flex', alignItems:'center', gap:16, padding:'14px 24px', cursor:'pointer', color:'#ea0038', fontSize:15 }}
+              onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+              <span style={{ fontSize:18, width:20, textAlign:'center' }}>🚪</span>
+              Exit group
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -136,7 +172,8 @@ export function ContactInfo({
 export function StarredMessages({ allChats, onNavigate, onLog }) {
   const starred = [];
   allChats.forEach(chat => {
-    const contact = CONTACTS.find(c => c.id === chat.contactId);
+    const contact = getChatContact(chat);
+    if (!contact) return;
     chat.messages.filter(m => m.starred).forEach(m => starred.push({ ...m, contactName: contact.name, chatId: chat.id }));
   });
 
