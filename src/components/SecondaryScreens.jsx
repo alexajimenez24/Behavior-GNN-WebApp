@@ -222,11 +222,11 @@ export function ChatSearchPanel({ chat, onClose, onLog, onSelectMessage }) {
       <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
         <button onClick={handleClose}
           style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
-        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>Buscar mensajes</span>
+        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>Search Messages</span>
       </div>
 
       <div style={{ padding:'12px 16px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
-        <button title="Buscar por fecha" style={{ width:38, height:38, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#54656f' }}>
+        <button title="Search by date" style={{ width:38, height:38, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#54656f' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="5" width="14" height="15" rx="2"/>
             <path d="M3 9.5h14M7.5 3v4M13 3v4"/>
@@ -246,7 +246,7 @@ export function ChatSearchPanel({ chat, onClose, onLog, onSelectMessage }) {
               setQuery(e.target.value);
               onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'chat search field' });
             }}
-            placeholder={`Buscar en el chat con ${contact.name}`}
+            placeholder={`Search in chat with ${contact.name}`}
             style={{ flex:1, minWidth:0, background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, fontFamily:'inherit' }}
           />
           {query && (
@@ -258,11 +258,11 @@ export function ChatSearchPanel({ chat, onClose, onLog, onSelectMessage }) {
       <div style={{ flex:1, overflowY:'auto' }}>
         {query.trim() === '' ? (
           <div style={{ textAlign:'center', color:'#667781', fontSize:13, padding:'48px 24px', lineHeight:1.6 }}>
-            Escribe una palabra o frase para buscar mensajes en esta conversación.
+            Type a word or phrase to search for messages in this conversation.
           </div>
         ) : groups.length === 0 ? (
           <div style={{ textAlign:'center', color:'#667781', fontSize:13, padding:'48px 24px' }}>
-            No se encontraron mensajes.
+            No messages found.
           </div>
         ) : groups.map(group => (
           <div key={group.key}>
