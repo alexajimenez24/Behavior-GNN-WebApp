@@ -19,12 +19,47 @@ const SHEET_SCHEMAS = {
 
 let sheetsClient = null;
 
+function loadCredentials() {
+  const raw = process.env.GOOGLE_CREDENTIALS_JSON;
+  if (!raw) return null;
+
+  let jsonString = raw.trim();
+  const looksLikeJson = jsonString.startsWith('{');
+  if (!looksLikeJson) {
+    try {
+      jsonString = Buffer.from(jsonString, 'base64').toString('utf8');
+    } catch (err) {
+      throw new Error('GOOGLE_CREDENTIALS_JSON is set but is neither valid JSON nor valid base64');
+    }
+  }
+
+  try {
+    return JSON.parse(jsonString);
+  } catch (err) {
+    throw new Error('GOOGLE_CREDENTIALS_JSON could not be parsed as JSON: ' + err.message);
+  }
+}
+
 async function getSheetsClient() {
   if (sheetsClient) return sheetsClient;
-  const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
+
+  const credentials = loadCredentials();
+
+  const authOptions = { scopes: ['https://www.googleapis.com/auth/spreadsheets'] };
+  if (credentials) {
+    // Deployed environments: paste the service account JSON into an env var.
+    authOptions.credentials = credentials;
+  } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+    // Local development: point at a key file on disk, as before.
+    authOptions.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  } else {
+    throw new Error(
+      'No Google credentials found. Set GOOGLE_CREDENTIALS_JSON (recommended for hosted deployments) ' +
+      'or GOOGLE_APPLICATION_CREDENTIALS (a local key file path) in your environment.'
+    );
+  }
+
+  const auth = new google.auth.GoogleAuth(authOptions);
   const authClient = await auth.getClient();
   sheetsClient = google.sheets({ version: 'v4', auth: authClient });
   return sheetsClient;
