@@ -25,7 +25,7 @@ export default function ChatView({
   onToggleMute, onToggleBlock, onToggleFavorite,
   onClearChat, onDeleteChat,
   highlightMessageId,
-  chatSearchOpen, onOpenChatSearch, onCloseChatSearch,
+  onOpenChatSearch,
 }) {
   const [input, setInput] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -37,80 +37,16 @@ export default function ChatView({
   const [attachAccept, setAttachAccept] = useState('*/*');
   const [messages, setMessages] = useState(chat.messages);
   const [flashId, setFlashId] = useState(null);
-  const [chatSearchQuery, setChatSearchQuery] = useState('');
-  const [chatMatchIndex, setChatMatchIndex] = useState(0);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
-  const chatSearchInputRef = useRef(null);
 
   const contact = getChatContact(chat);
-
-
-  const chatSearchMatches = React.useMemo(() => {
-    if (!chatSearchQuery.trim()) return [];
-    const q = chatSearchQuery.toLowerCase();
-    return messages.filter(m => m.text.toLowerCase().includes(q)).slice().reverse();
-  }, [messages, chatSearchQuery]);
-
-  useEffect(() => {
-    setChatMatchIndex(0);
-  }, [chatSearchQuery, chat.id]);
-
-  useEffect(() => {
-    if (!chatSearchOpen) {
-      setChatSearchQuery('');
-      setChatMatchIndex(0);
-    } else {
-      setTimeout(() => chatSearchInputRef.current?.focus(), 0);
-    }
-  }, [chatSearchOpen, chat.id]);
-
-  useEffect(() => {
-    if (!chatSearchOpen || chatSearchMatches.length === 0) return;
-    const msg = chatSearchMatches[chatMatchIndex];
-    if (!msg) return;
-    const el = document.getElementById(msg.id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      setFlashId(msg.id);
-      setTimeout(() => setFlashId(null), 1200);
-    }
-  }, [chatMatchIndex, chatSearchMatches, chatSearchOpen]);
-
-  const goToOlderMatch = () => {
-    if (chatSearchMatches.length === 0) return;
-    setChatMatchIndex(i => (i + 1) % chatSearchMatches.length);
-  };
-  const goToNewerMatch = () => {
-    if (chatSearchMatches.length === 0) return;
-    setChatMatchIndex(i => (i - 1 + chatSearchMatches.length) % chatSearchMatches.length);
-  };
 
   const handleOpenChatSearch = () => {
     onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.CHAT_MENU_SEARCH, target_label: 'search in chat' });
     onOpenChatSearch && onOpenChatSearch();
   };
-
-  const handleCloseChatSearch = () => {
-    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.BACK_BUTTON, target_label: 'close chat search' });
-    onCloseChatSearch && onCloseChatSearch();
-  };
-
-  function renderMessageText(msg) {
-    if (!chatSearchOpen || !chatSearchQuery.trim()) return msg.text;
-    const q = chatSearchQuery.toLowerCase();
-    const idx = msg.text.toLowerCase().indexOf(q);
-    if (idx === -1) return msg.text;
-    const before = msg.text.slice(0, idx);
-    const match = msg.text.slice(idx, idx + chatSearchQuery.length);
-    const after = msg.text.slice(idx + chatSearchQuery.length);
-    return (
-      <>
-        {before}<span style={{ background:'#fff3b0', color:'#111b21', borderRadius:2 }}>{match}</span>{after}
-      </>
-    );
-  }
 
   useEffect(() => {
     setMessages(chat.messages);
@@ -279,44 +215,6 @@ export default function ChatView({
     <div style={{ flex:1, display:'flex', flexDirection:'column', background:'#efeae2', position:'relative', overflow:'hidden' }}>
       <div style={{ position:'absolute', inset:0, opacity:0.06, backgroundImage:`url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23111b21' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`, zIndex:0 }} />
 
-      {chatSearchOpen ? (
-        <div style={{ background:'#f0f2f5', padding:'0 16px', display:'flex', alignItems:'center', gap:10, minHeight:60, zIndex:10, borderBottom:'1px solid #e9edef' }}>
-          <button onClick={handleCloseChatSearch} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:22, padding:'4px 8px 4px 0', lineHeight:1 }}>←</button>
-          <div style={{ flex:1, background:'#ffffff', borderRadius:8, display:'flex', alignItems:'center', gap:8, padding:'8px 12px' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input
-              ref={chatSearchInputRef}
-              value={chatSearchQuery}
-              onChange={e => {
-                setChatSearchQuery(e.target.value);
-                onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'in-chat search field' });
-              }}
-              onKeyDown={e => {
-                if (e.key === 'Enter') { e.shiftKey ? goToNewerMatch() : goToOlderMatch(); }
-                if (e.key === 'Escape') handleCloseChatSearch();
-              }}
-              placeholder={`Search in ${contact.name}'s chat`}
-              style={{ flex:1, background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, fontFamily:'inherit' }}
-            />
-            {chatSearchQuery && (
-              <button onClick={() => setChatSearchQuery('')} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:18, lineHeight:1 }}>×</button>
-            )}
-          </div>
-          {chatSearchQuery.trim() && (
-            <div style={{ display:'flex', alignItems:'center', gap:2, flexShrink:0 }}>
-              <span style={{ color:'#667781', fontSize:12, minWidth:44, textAlign:'center' }}>
-                {chatSearchMatches.length === 0 ? '0/0' : `${chatMatchIndex + 1}/${chatSearchMatches.length}`}
-              </span>
-              <IconBtn title="Older match" onClick={goToOlderMatch}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
-              </IconBtn>
-              <IconBtn title="Newer match" onClick={goToNewerMatch}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-              </IconBtn>
-            </div>
-          )}
-        </div>
-      ) : (
       <div style={{ background:'#f0f2f5', padding:'0 16px', display:'flex', alignItems:'center', gap:12, minHeight:60, zIndex:10, borderBottom:'1px solid #e9edef' }}>
         <button onClick={handleBack} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:22, padding:'4px 8px 4px 0', lineHeight:1 }}>←</button>
         <div onClick={handleContactHeader} style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer', flex:1 }}>
@@ -354,7 +252,6 @@ export default function ChatView({
           </div>
         </div>
       </div>
-      )}
 
       <div onScroll={handleScroll} style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}>
         <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:'100%' }}>
@@ -396,7 +293,7 @@ export default function ChatView({
                     {msg.attachment?.isImage && (
                       <img src={msg.attachment.url} alt={msg.attachment.name} style={{ maxWidth:260, maxHeight:260, borderRadius:8, display:'block', marginBottom:4, objectFit:'cover' }} />
                     )}
-                    <span style={{ color:'#111b21', fontSize:14, fontWeight:400, lineHeight:1.5, wordBreak:'break-word' }}>{renderMessageText(msg)}</span>
+                    <span style={{ color:'#111b21', fontSize:14, fontWeight:400, lineHeight:1.5, wordBreak:'break-word' }}>{msg.text}</span>
                     <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:4, marginTop:2 }}>
                       {msg.starred && <span style={{ fontSize:10 }}>⭐</span>}
                       <span style={{ color:'#667781', fontSize:11 }}>{formatTime(msg.time)}</span>

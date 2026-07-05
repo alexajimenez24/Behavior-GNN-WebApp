@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CONTACTS, getChatContact } from '../data';
 import { SCREENS, TARGETS } from '../data';
 
@@ -80,12 +80,12 @@ export function ContactInfo({
           <div style={{ color:'#667781', fontSize:14, marginTop:4 }}>{contact.phone}</div>
 
           <button onClick={() => { logTap(TARGETS.CONTACT_SEARCH, 'search in chat'); onOpenChatSearch && onOpenChatSearch(); }}
+            title="Search"
             style={{ marginTop:20, width:52, height:52, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}
             onMouseEnter={e => e.currentTarget.style.background='#e9edef'}
             onMouseLeave={e => e.currentTarget.style.background='#f0f2f5'}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           </button>
-          <div style={{ color:'#667781', fontSize:12, marginTop:6 }}>Search</div>
         </div>
 
         <div style={{ height:8, background:'#f0f2f5' }} />
@@ -164,6 +164,122 @@ export function ContactInfo({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function HighlightedText({ text, query }) {
+  if (!query) return <>{text}</>;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return <>{text}</>;
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + query.length);
+  const after = text.slice(idx + query.length);
+  return <>{before}<span style={{ color:'#00a884', fontWeight:700 }}>{match}</span>{after}</>;
+}
+
+function formatSearchDate(ts) {
+  const d = new Date(ts);
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+}
+
+export function ChatSearchPanel({ chat, onClose, onLog, onSelectMessage }) {
+  const [query, setQuery] = useState('');
+  if (!chat) return null;
+  const contact = getChatContact(chat);
+  if (!contact) return null;
+
+  const matches = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return chat.messages.filter(m => (m.text || '').toLowerCase().includes(q));
+  }, [chat.messages, query]);
+
+  const groups = React.useMemo(() => {
+    const byDate = [];
+    [...matches].reverse().forEach(msg => {
+      const key = formatSearchDate(msg.time);
+      let group = byDate.find(g => g.key === key);
+      if (!group) { group = { key, items: [] }; byDate.push(group); }
+      group.items.push(msg);
+    });
+    return byDate;
+  }, [matches]);
+
+  const handleClose = () => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: TARGETS.BACK_BUTTON, target_label: 'close chat search' });
+    onClose && onClose();
+  };
+
+  const handleResultClick = (msg) => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'tap', target_id: `${TARGETS.SEARCH_RESULT}_${msg.id}`, target_label: msg.text.slice(0, 30) });
+    onSelectMessage && onSelectMessage(msg.id);
+  };
+
+  return (
+    <div style={{ width:400, flexShrink:0, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
+      <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
+        <button onClick={handleClose}
+          style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
+        <span style={{ color:'#111b21', fontSize:16, fontWeight:500 }}>Buscar mensajes</span>
+      </div>
+
+      <div style={{ padding:'12px 16px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
+        <button title="Buscar por fecha" style={{ width:38, height:38, borderRadius:'50%', border:'none', background:'#f0f2f5', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, color:'#54656f' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="14" height="15" rx="2"/>
+            <path d="M3 9.5h14M7.5 3v4M13 3v4"/>
+            <circle cx="17.5" cy="17.5" r="3.6" fill="#ffffff" stroke="currentColor"/>
+            <path d="m20 20 1.8 1.8"/>
+          </svg>
+        </button>
+        <div style={{
+          flex:1, background:'#ffffff', borderRadius:24, display:'flex', alignItems:'center', gap:8, padding:'8px 14px',
+          border: query ? '1.5px solid #00a884' : '1px solid #d1d7db',
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input
+            autoFocus
+            value={query}
+            onChange={e => {
+              setQuery(e.target.value);
+              onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'text_input', target_id: TARGETS.SEARCH_INPUT, target_label: 'chat search field' });
+            }}
+            placeholder={`Buscar en el chat con ${contact.name}`}
+            style={{ flex:1, minWidth:0, background:'none', border:'none', outline:'none', color:'#111b21', fontSize:14, fontFamily:'inherit' }}
+          />
+          {query && (
+            <button onClick={() => setQuery('')} style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:16, lineHeight:1, flexShrink:0 }}>×</button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flex:1, overflowY:'auto' }}>
+        {query.trim() === '' ? (
+          <div style={{ textAlign:'center', color:'#667781', fontSize:13, padding:'48px 24px', lineHeight:1.6 }}>
+            Escribe una palabra o frase para buscar mensajes en esta conversación.
+          </div>
+        ) : groups.length === 0 ? (
+          <div style={{ textAlign:'center', color:'#667781', fontSize:13, padding:'48px 24px' }}>
+            No se encontraron mensajes.
+          </div>
+        ) : groups.map(group => (
+          <div key={group.key}>
+            <div style={{ padding:'10px 20px 4px', color:'#667781', fontSize:12 }}>{group.key}</div>
+            {group.items.map(msg => (
+              <div key={msg.id} onClick={() => handleResultClick(msg)}
+                style={{ display:'flex', alignItems:'flex-start', gap:6, padding:'8px 20px', cursor:'pointer' }}
+                onMouseEnter={e => e.currentTarget.style.background='#f5f6f6'}
+                onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                {msg.from === 'me' && <span style={{ color:'#53bdeb', fontSize:14, lineHeight:'21px', flexShrink:0 }}>✓✓</span>}
+                <span style={{ color:'#111b21', fontSize:14, lineHeight:1.5, wordBreak:'break-word' }}>
+                  <HighlightedText text={msg.text} query={query} />
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );

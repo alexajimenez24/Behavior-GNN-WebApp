@@ -1,18 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplete, startTime }) {
-  const [elapsed, setElapsed] = useState(0);
   const [showHint, setShowHint] = useState(false);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startTime) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [startTime]);
-
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
 
   const handleHelp = () => {
     setShowHint(true);
@@ -46,13 +35,6 @@ export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplet
               💡 {task.hint}
             </div>
           )}
-        </div>
-
-        <div style={{ textAlign:'center', background:'#f0f2f5', borderRadius:8, padding:'6px 14px', flexShrink:0 }}>
-          <div style={{ color:'#667781', fontSize:10, fontWeight:600, letterSpacing:0.5 }}>TIME</div>
-          <div style={{ color: elapsed > 120 ? '#c9820a' : '#111b21', fontSize:16, fontWeight:700, fontVariantNumeric:'tabular-nums' }}>
-            {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}
-          </div>
         </div>
 
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>

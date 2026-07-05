@@ -7,7 +7,7 @@ import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
 import TaskBar from './components/TaskBar';
 import { TaskBriefing, TaskComplete, SessionComplete } from './components/TaskScreens';
-import { ContactInfo, StarredMessages, Settings, EmptyState } from './components/SecondaryScreens';
+import { ContactInfo, ChatSearchPanel, StarredMessages, Settings, EmptyState } from './components/SecondaryScreens';
 
 export default function App() {
 
@@ -180,7 +180,10 @@ export default function App() {
     return newGroup;
   }, []);
 
-  const handleOpenContactPanel = useCallback(() => setContactPanelOpen(true), []);
+  const handleOpenContactPanel = useCallback(() => {
+    setChatSearchOpen(false);
+    setContactPanelOpen(true);
+  }, []);
   const handleCloseContactPanel = useCallback(() => setContactPanelOpen(false), []);
 
 
@@ -311,9 +314,7 @@ export default function App() {
               onClearChat={handleClearChat}
               onDeleteChat={handleDeleteChat}
               highlightMessageId={highlightMessageId}
-              chatSearchOpen={chatSearchOpen}
               onOpenChatSearch={handleOpenChatSearch}
-              onCloseChatSearch={handleCloseChatSearch}
             />
           ) : currentScreen === SCREENS.STARRED ? (
             <StarredMessages allChats={chats} onNavigate={handleNavigate} onLog={logEvent} />
@@ -335,6 +336,15 @@ export default function App() {
               onToggleBlock={() => handleToggleBlock(activeFavKey)}
               onToggleFavorite={() => handleToggleFavorite(activeFavKey)}
               onOpenChatSearch={handleOpenChatSearch}
+            />
+          )}
+
+          {chatSearchOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
+            <ChatSearchPanel
+              chat={liveActiveChat}
+              onClose={handleCloseChatSearch}
+              onLog={logEvent}
+              onSelectMessage={(msgId) => setHighlightMessageId(msgId)}
             />
           )}
 
