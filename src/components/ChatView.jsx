@@ -37,6 +37,9 @@ export default function ChatView({
   const [attachAccept, setAttachAccept] = useState('*/*');
   const [messages, setMessages] = useState(chat.messages);
   const [flashId, setFlashId] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -72,6 +75,17 @@ export default function ChatView({
     }, 150);
     return () => clearTimeout(t);
   }, [highlightMessageId, chat.id]);
+
+
+  useEffect(() => {
+    return () => {
+      messagesRef.current.forEach(m => {
+        if (m.attachment?.isImage && m.attachment.url) {
+          URL.revokeObjectURL(m.attachment.url);
+        }
+      });
+    };
+  }, []);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -145,22 +159,51 @@ export default function ChatView({
     setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
-  const handleFileChosen = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) { return; }
+  const buildAttachmentMessage = (file, idx) => {
     const isImage = file.type.startsWith('image/');
-    const newMsg = {
-      id: `MSG_ATT_${Date.now()}`,
+    return {
+      id: `MSG_ATT_${Date.now()}_${idx}`,
       from: 'me',
       text: isImage ? '📷 Photo' : `📎 ${file.name}`,
       time: Date.now(),
       starred: false,
       attachment: { name: file.name, type: file.type, isImage, url: isImage ? URL.createObjectURL(file) : null },
     };
-    setMessages(prev => [...prev, newMsg]);
-    onSend && onSend({ chatId: chat.id, message: newMsg });
-    updateTaskState && updateTaskState('sentMessages', { chatId: chat.id, msg: newMsg });
+  };
+
+  const sendAttachmentMessages = (newMsgs) => {
+    if (!newMsgs.length) return;
+    setMessages(prev => [...prev, ...newMsgs]);
+    newMsgs.forEach(newMsg => {
+      onSend && onSend({ chatId: chat.id, message: newMsg });
+      updateTaskState && updateTaskState('sentMessages', { chatId: chat.id, msg: newMsg });
+    });
+  };
+
+  const handleFilesChosen = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    sendAttachmentMessages(files.map(buildAttachmentMessage));
     e.target.value = '';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes('Files')) setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+    if (!files.length) return;
+    sendAttachmentMessages(files.map(buildAttachmentMessage));
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'drop', target_id: TARGETS.ATTACH_MENU_PHOTOS, target_label: 'dropped photo(s)' });
   };
 
   const attachOptions = [
@@ -253,7 +296,24 @@ export default function ChatView({
         </div>
       </div>
 
-      <div onScroll={handleScroll} style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}>
+      <div
+        onScroll={handleScroll}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}
+      >
+        {isDragOver && (
+          <div style={{
+            position:'absolute', inset:8, border:'2px dashed #00a884', borderRadius:12,
+            background:'rgba(0,168,132,0.08)', zIndex:5, display:'flex',
+            alignItems:'center', justifyContent:'center', pointerEvents:'none',
+          }}>
+            <div style={{ background:'#ffffff', padding:'10px 20px', borderRadius:8, color:'#00a884', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
+              📷 Drop photos to send
+            </div>
+          </div>
+        )}
         <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:'100%' }}>
           {messages.map((msg, i) => {
             const isMe = msg.from === 'me';
@@ -337,7 +397,7 @@ export default function ChatView({
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept={attachAccept} style={{ display:'none' }} onChange={handleFileChosen} />
+      <input ref={fileInputRef} type="file" accept={attachAccept} multiple style={{ display:'none' }} onChange={handleFilesChosen} />
 
       <div style={{ background:'#f0f2f5', padding:'8px 12px 10px', zIndex:10, position:'relative' }}>
         {showAttachMenu && (
@@ -388,7 +448,7 @@ export default function ChatView({
       </div>
 
       {(showAttachMenu || showMoreMenu) && (
-        <div onClick={() => { setShowAttachMenu(false); setShowMoreMenu(false); }} style={{ position:'fixed', inset:0, zIndex:60 }} />
+        <div onClick={() => { setShowAttachMenu(false); setShowMoreMenu(false); }} style={{ position:'fixed', inset:0, zIndex:9 }} />
       )}
 
       {showForward && (
