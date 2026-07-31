@@ -1,20 +1,23 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { SCREENS, TASKS as DEFAULT_TASKS, CHATS, getChatFavKey } from './data';
 import { useLogger } from './useLogger';
+import { useIsMobile, useAppHeight } from './responsive';
 import ParticipantSetup from './components/ParticipantSetup';
-import TaskBuilder from './components/TaskBuilder';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
-import TaskBar from './components/TaskBar';
 import { TaskBriefing, TaskComplete, SessionComplete } from './components/TaskScreens';
 import { ContactInfo, ChatSearchPanel, StarredMessages, Settings, EmptyState } from './components/SecondaryScreens';
 
 export default function App() {
 
+  const isMobile = useIsMobile();
+  useAppHeight();
+
   const [participant, setParticipant] = useState(null);
 
-  const [tasks, setTasks] = useState(DEFAULT_TASKS);
-  const [setupDone, setSetupDone] = useState(DEFAULT_TASKS.length > 0);
+  const tasks = DEFAULT_TASKS;
+
+  const taskTargetRef = useRef({});
 
   const [taskIndex, setTaskIndex] = useState(0);
   const [taskPhase, setTaskPhase] = useState('briefing'); 
@@ -38,7 +41,7 @@ export default function App() {
 
   const logger = useLogger(participant);
   const {
-    logEvent, startTrial, endTrial, markHelpUsed,
+    logEvent, startTrial, endTrial,
     exportToExcel, autoExportOnSessionEnd,
     sendToGoogleSheets, autoSendOnSessionEnd,
     sheetsStatus, sheetsError,
@@ -54,18 +57,19 @@ export default function App() {
     setTaskPhase('briefing');
   };
 
-  const handleAddTask = (task) => {
-    setTasks(prev => [...prev, task]);
-  };
-
-  const handleSetupDone = () => {
-    setSetupDone(true);
-  };
-
   const handleTaskStart = () => {
     startTrial(currentTask, taskIndex);
     setTaskStartTime(Date.now());
     setTaskPhase('active');
+
+    if (currentTask.task_id === 'T01') {
+      const aliceChat = chats.find(c => c.contactId === 'C01');
+      const lastAliceMsg = aliceChat?.messages[aliceChat.messages.length - 1];
+      taskTargetRef.current = { requiredMessageId: lastAliceMsg?.id || null };
+    } else {
+      taskTargetRef.current = {};
+    }
+
     logEvent({
       screen_id:    SCREENS.TASK_BRIEFING,
       action_type:  'screen_start',
@@ -75,11 +79,36 @@ export default function App() {
   };
 
   const handleTaskComplete = (success) => {
-    const trial = endTrial(success, logger.currentTrial?.help_used || false);
+    const trial = endTrial(success, false);
     setLastTrial(trial);
     setLastSuccess(success);
     setTaskPhase('complete');
   };
+
+  useEffect(() => {
+    if (taskPhase !== 'active' || !currentTask) return;
+
+    let fulfilled = false;
+
+    if (currentTask.task_id === 'T01') {
+      const requiredMessageId = taskTargetRef.current.requiredMessageId;
+      fulfilled = !!requiredMessageId && taskState.forwardedMessages.some(
+        (f) => f.to === 'C02' && f.msg?.id === requiredMessageId
+      );
+    } else if (currentTask.task_id === 'T02') {
+      const required = ['C01', 'C03', 'C05'];
+      fulfilled = chats.some((c) => (
+        c.isGroup &&
+        Array.isArray(c.members) &&
+        c.members.length === required.length &&
+        required.every((id) => c.members.includes(id))
+      ));
+    }
+
+    if (fulfilled) {
+      handleTaskComplete(true);
+    }
+  }, [taskPhase, currentTask, taskState, chats]);
 
   const handleNextTask = () => {
     if (isLastTask) {
@@ -99,8 +128,6 @@ export default function App() {
   const handleRestart = () => {
     resetSession();                          
     setParticipant(null);
-    setTasks(DEFAULT_TASKS);
-    setSetupDone(DEFAULT_TASKS.length > 0);
     setTaskIndex(0);
     setTaskPhase('briefing');
     setCurrentScreen(SCREENS.CHAT_LIST);
@@ -220,17 +247,6 @@ export default function App() {
     return <ParticipantSetup onComplete={handleParticipantComplete} />;
   }
 
-  if (!setupDone) {
-    return (
-      <TaskBuilder
-        existingTasks={tasks}
-        onAddTask={handleAddTask}
-        onDone={handleSetupDone}
-        participant={participant}
-      />
-    );
-  }
-
   if (taskPhase === 'session_done') {
     return (
       <SessionComplete
@@ -245,130 +261,147 @@ export default function App() {
     );
   }
 
-  if (!currentTask) {
-    return (
-      <TaskBuilder
-        existingTasks={tasks}
-        onAddTask={handleAddTask}
-        onDone={handleSetupDone}
-        participant={participant}
-      />
-    );
-  }
-
   const liveActiveChat = activeChat ? chats.find(c => c.id === activeChat.id) || activeChat : null;
   const activeFavKey = getChatFavKey(liveActiveChat);
 
-  return (
-    <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'#f0f2f5', overflow:'hidden' }}>
-      {taskPhase === 'active' && (
-        <TaskBar
+  const mobilePane = contactPanelOpen
+    ? 'contact'
+    : chatSearchOpen
+    ? 'search'
+    : currentScreen === SCREENS.CHAT_VIEW && liveActiveChat
+    ? 'chat'
+    : currentScreen === SCREENS.STARRED
+    ? 'starred'
+    : currentScreen === SCREENS.SETTINGS
+    ? 'settings'
+    : 'list';
+
+  const sidebarProps = {
+    currentScreen,
+    activeChat: liveActiveChat,
+    onSelectChat: handleSelectChat,
+    onNavigate: handleNavigate,
+    onLog: logEvent,
+    searchQuery,
+    setSearchQuery: (q) => {
+      setSearchQuery(q);
+      if (q) updateTaskState('searchesPerformed', q);
+    },
+    chats,
+    onLogout: handleRestart,
+    onCreateGroup: handleCreateGroup,
+    favoriteContacts,
+  };
+
+  const chatViewProps = {
+    chat: liveActiveChat,
+    onNavigate: handleNavigate,
+    onLog: logEvent,
+    onSend: handleSend,
+    onForward: handleForward,
+    onStar: handleStar,
+    onViewMessage: (msgId) => updateTaskState('viewedMessages', msgId),
+    taskState,
+    updateTaskState,
+    onOpenContactPanel: handleOpenContactPanel,
+    isMuted: mutedContacts.has(activeFavKey),
+    isBlocked: blockedContacts.has(activeFavKey),
+    isFavorite: favoriteContacts.has(activeFavKey),
+    onToggleMute: () => handleToggleMute(activeFavKey),
+    onToggleBlock: () => handleToggleBlock(activeFavKey),
+    onToggleFavorite: () => handleToggleFavorite(activeFavKey),
+    onClearChat: handleClearChat,
+    onDeleteChat: handleDeleteChat,
+    highlightMessageId,
+    onOpenChatSearch: handleOpenChatSearch,
+  };
+
+  const contactInfoProps = {
+    chat: liveActiveChat,
+    onClose: handleCloseContactPanel,
+    onLog: logEvent,
+    isMuted: mutedContacts.has(activeFavKey),
+    isBlocked: blockedContacts.has(activeFavKey),
+    isFavorite: favoriteContacts.has(activeFavKey),
+    onToggleMute: () => handleToggleMute(activeFavKey),
+    onToggleBlock: () => handleToggleBlock(activeFavKey),
+    onToggleFavorite: () => handleToggleFavorite(activeFavKey),
+    onOpenChatSearch: handleOpenChatSearch,
+  };
+
+  const taskOverlays = (
+    <>
+      {taskPhase === 'briefing' && (
+        <TaskBriefing task={currentTask} taskIndex={taskIndex} totalTasks={tasks.length} onStart={handleTaskStart} />
+      )}
+      {taskPhase === 'complete' && (
+        <TaskComplete
+          trial={lastTrial}
           task={currentTask}
           taskIndex={taskIndex}
           totalTasks={tasks.length}
-          onHelp={markHelpUsed}
-          onComplete={handleTaskComplete}
-          startTime={taskStartTime}
+          isSuccess={lastSuccess}
+          onNext={handleNextTask}
+          isLast={isLastTask}
         />
       )}
+    </>
+  );
 
+  return (
+    <div style={{ height:'var(--app-height, 100dvh)', width:'100%', display:'flex', flexDirection:'column', background:'#f0f2f5', overflow:'hidden' }}>
       <div style={{ display:'flex', flex:1, overflow:'hidden', position:'relative' }}>
-        <div style={{ display:'flex', width:'100%', height:'100%', paddingTop: taskPhase === 'active' ? 72 : 0, boxSizing:'border-box' }}>
-        <Sidebar
-          currentScreen={currentScreen}
-          activeChat={liveActiveChat}
-          onSelectChat={handleSelectChat}
-          onNavigate={handleNavigate}
-          onLog={logEvent}
-          searchQuery={searchQuery}
-          setSearchQuery={(q) => {
-            setSearchQuery(q);
-            if (q) updateTaskState('searchesPerformed', q);
-          }}
-          chats={chats}
-          onLogout={handleRestart}
-          onCreateGroup={handleCreateGroup}
-          favoriteContacts={favoriteContacts}
-        />
+        <div style={{ display:'flex', width:'100%', height:'100%', boxSizing:'border-box' }}>
 
-
-        <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
-          {currentScreen === SCREENS.CHAT_VIEW && liveActiveChat ? (
-            <ChatView
-              chat={liveActiveChat}
-              onNavigate={handleNavigate}
-              onLog={logEvent}
-              onSend={handleSend}
-              onForward={handleForward}
-              onStar={handleStar}
-              onViewMessage={(msgId) => updateTaskState('viewedMessages', msgId)}
-              taskState={taskState}
-              updateTaskState={updateTaskState}
-              onOpenContactPanel={handleOpenContactPanel}
-              isMuted={mutedContacts.has(activeFavKey)}
-              isBlocked={blockedContacts.has(activeFavKey)}
-              isFavorite={favoriteContacts.has(activeFavKey)}
-              onToggleMute={() => handleToggleMute(activeFavKey)}
-              onToggleBlock={() => handleToggleBlock(activeFavKey)}
-              onToggleFavorite={() => handleToggleFavorite(activeFavKey)}
-              onClearChat={handleClearChat}
-              onDeleteChat={handleDeleteChat}
-              highlightMessageId={highlightMessageId}
-              onOpenChatSearch={handleOpenChatSearch}
-            />
-          ) : currentScreen === SCREENS.STARRED ? (
-            <StarredMessages allChats={chats} onNavigate={handleNavigate} onLog={logEvent} />
-          ) : currentScreen === SCREENS.SETTINGS ? (
-            <Settings onNavigate={handleNavigate} onLog={logEvent} />
+          {isMobile ? (
+            <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative', width:'100%' }}>
+              {mobilePane === 'list' && <Sidebar {...sidebarProps} isMobile />}
+              {mobilePane === 'chat' && <ChatView {...chatViewProps} />}
+              {mobilePane === 'starred' && <StarredMessages allChats={chats} onNavigate={handleNavigate} onLog={logEvent} />}
+              {mobilePane === 'settings' && <Settings onNavigate={handleNavigate} onLog={logEvent} />}
+              {mobilePane === 'contact' && liveActiveChat && <ContactInfo {...contactInfoProps} />}
+              {mobilePane === 'search' && liveActiveChat && (
+                <ChatSearchPanel
+                  chat={liveActiveChat}
+                  onClose={handleCloseChatSearch}
+                  onLog={logEvent}
+                  onSelectMessage={(msgId) => setHighlightMessageId(msgId)}
+                />
+              )}
+              {taskOverlays}
+            </div>
           ) : (
-            <EmptyState />
-          )}
+            <>
+              <Sidebar {...sidebarProps} />
 
-          {contactPanelOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
-            <ContactInfo
-              chat={liveActiveChat}
-              onClose={handleCloseContactPanel}
-              onLog={logEvent}
-              isMuted={mutedContacts.has(activeFavKey)}
-              isBlocked={blockedContacts.has(activeFavKey)}
-              isFavorite={favoriteContacts.has(activeFavKey)}
-              onToggleMute={() => handleToggleMute(activeFavKey)}
-              onToggleBlock={() => handleToggleBlock(activeFavKey)}
-              onToggleFavorite={() => handleToggleFavorite(activeFavKey)}
-              onOpenChatSearch={handleOpenChatSearch}
-            />
-          )}
+              <div style={{ flex:1, display:'flex', overflow:'hidden', position:'relative' }}>
+                {currentScreen === SCREENS.CHAT_VIEW && liveActiveChat ? (
+                  <ChatView {...chatViewProps} />
+                ) : currentScreen === SCREENS.STARRED ? (
+                  <StarredMessages allChats={chats} onNavigate={handleNavigate} onLog={logEvent} />
+                ) : currentScreen === SCREENS.SETTINGS ? (
+                  <Settings onNavigate={handleNavigate} onLog={logEvent} />
+                ) : (
+                  <EmptyState />
+                )}
 
-          {chatSearchOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
-            <ChatSearchPanel
-              chat={liveActiveChat}
-              onClose={handleCloseChatSearch}
-              onLog={logEvent}
-              onSelectMessage={(msgId) => setHighlightMessageId(msgId)}
-            />
-          )}
+                {contactPanelOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
+                  <ContactInfo {...contactInfoProps} />
+                )}
 
-          {taskPhase === 'briefing' && (
-            <TaskBriefing
-              task={currentTask}
-              taskIndex={taskIndex}
-              totalTasks={tasks.length}
-              onStart={handleTaskStart}
-            />
-          )}
+                {chatSearchOpen && currentScreen === SCREENS.CHAT_VIEW && liveActiveChat && (
+                  <ChatSearchPanel
+                    chat={liveActiveChat}
+                    onClose={handleCloseChatSearch}
+                    onLog={logEvent}
+                    onSelectMessage={(msgId) => setHighlightMessageId(msgId)}
+                  />
+                )}
 
-          {taskPhase === 'complete' && (
-            <TaskComplete
-              trial={lastTrial}
-              task={currentTask}
-              taskIndex={taskIndex}
-              totalTasks={tasks.length}
-              isSuccess={lastSuccess}
-              onNext={handleNextTask}
-              isLast={isLastTask}
-            />
+                {taskOverlays}
+              </div>
+            </>
           )}
-        </div>
         </div>
       </div>
     </div>

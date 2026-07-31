@@ -26,8 +26,8 @@ export default function TaskBuilder({ existingTasks, onAddTask, onDone, particip
   };
 
   return (
-    <div style={{ height:'100vh', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto', padding:'20px 0' }}>
-      <div style={{ background:'#ffffff', borderRadius:12, padding:'36px 44px', width:560, boxShadow:'0 8px 32px rgba(0,0,0,0.12)' }}>
+    <div style={{ height:'100%', width:'100%', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto', padding:'20px 0' }}>
+      <div style={{ background:'#ffffff', borderRadius:12, padding:'clamp(20px,4vw,36px) clamp(20px,5vw,44px)', width:'min(560px, 94vw)', maxHeight:'92dvh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,0.12)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:6 }}>
           <div style={{ width:40, height:40, borderRadius:10, background:'#00a884', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>📋</div>
           <div>

@@ -66,7 +66,7 @@ export function ContactInfo({
   const logTap = (target_id, label) => onLog({ screen_id: currentScreen, action_type:'tap', target_id, target_label:label });
 
   return (
-    <div style={{ width:400, flexShrink:0, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
+    <div style={{ width:'min(400px, 100%)', flex:'0 0 auto', flexShrink:1, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
       <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
         <button onClick={() => { logTap(TARGETS.CONTACT_PANEL_CLOSE, isGroup ? 'close group info' : 'close contact info'); onClose(); }}
           style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>
@@ -218,7 +218,7 @@ export function ChatSearchPanel({ chat, onClose, onLog, onSelectMessage }) {
   };
 
   return (
-    <div style={{ width:400, flexShrink:0, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
+    <div style={{ width:'min(400px, 100%)', flex:'0 0 auto', flexShrink:1, background:'#ffffff', borderLeft:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', zIndex:40 }}>
       <div style={{ padding:'14px 20px', display:'flex', alignItems:'center', gap:22, borderBottom:'1px solid #e9edef', flexShrink:0 }}>
         <button onClick={handleClose}
           style={{ background:'none', border:'none', color:'#54656f', cursor:'pointer', fontSize:20, lineHeight:1 }}>×</button>

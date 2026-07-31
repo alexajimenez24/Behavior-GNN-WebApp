@@ -1,8 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 
 let eventCounter = 0;
 const genId = (prefix) => `${prefix}_${Date.now()}_${++eventCounter}`;
+
+const IDLE_THRESHOLD_MS = 1000;
 
 export function useLogger(participant) {
   const [taskTrials, setTaskTrials] = useState([]);
@@ -15,6 +17,11 @@ export function useLogger(participant) {
   const sheetsStatusRef = useRef('idle');
   const [sheetsStatus, setSheetsStatus] = useState('idle');
   const [sheetsError, setSheetsError] = useState(null);
+
+  const lastPointerPosRef = useRef({ x: null, y: null });
+
+  const idleMsRef = useRef(0);
+  const lastActivityRef = useRef(null);
 
   const [taskState, setTaskState] = useState({
     viewedMessages: [],
@@ -32,7 +39,43 @@ export function useLogger(participant) {
     }));
   }, []);
 
-  
+  useEffect(() => {
+    const recordPosition = (e) => {
+      const point = e.touches && e.touches[0] ? e.touches[0] : e;
+      if (typeof point.clientX === 'number' && typeof point.clientY === 'number') {
+        lastPointerPosRef.current = { x: Math.round(point.clientX), y: Math.round(point.clientY) };
+      }
+    };
+
+    const recordActivity = (e) => {
+      recordPosition(e);
+      if (!currentTrialRef.current) return;
+      const now = Date.now();
+      if (lastActivityRef.current != null) {
+        const gap = now - lastActivityRef.current;
+        if (gap > IDLE_THRESHOLD_MS) idleMsRef.current += gap;
+      }
+      lastActivityRef.current = now;
+    };
+
+    const opts = { passive: true };
+    window.addEventListener('pointermove', recordActivity, opts);
+    window.addEventListener('pointerdown', recordActivity, opts);
+    window.addEventListener('touchmove', recordActivity, opts);
+    window.addEventListener('mousemove', recordActivity, opts);
+    window.addEventListener('mousedown', recordActivity, opts);
+    window.addEventListener('scroll', recordActivity, { passive: true, capture: true });
+
+    return () => {
+      window.removeEventListener('pointermove', recordActivity, opts);
+      window.removeEventListener('pointerdown', recordActivity, opts);
+      window.removeEventListener('touchmove', recordActivity, opts);
+      window.removeEventListener('mousemove', recordActivity, opts);
+      window.removeEventListener('mousedown', recordActivity, opts);
+      window.removeEventListener('scroll', recordActivity, true);
+    };
+  }, []);
+
   const resetSession = useCallback(() => {
     setTaskTrials([]);
     setInteractionEvents([]);
@@ -51,11 +94,17 @@ export function useLogger(participant) {
     sheetsStatusRef.current = 'idle';
     setSheetsStatus('idle');
     setSheetsError(null);
+    idleMsRef.current = 0;
+    lastActivityRef.current = null;
+    lastPointerPosRef.current = { x: null, y: null };
   }, []);
 
   const logEvent = useCallback((params) => {
     if (!currentTrialRef.current) return;
     const screenId = params.screen_id || lastScreenRef.current || '';
+    const { x, y } = lastPointerPosRef.current;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const event = {
       event_id:        genId('EVT'),
       task_trial_id:   currentTrialRef.current.task_trial_id,
@@ -69,6 +118,12 @@ export function useLogger(participant) {
       target_id:       params.target_id    || '',
       target_label:    params.target_label || '',
       next_screen_id:  params.next_screen_id || '',
+      click_x:         x != null ? x : '',
+      click_y:         y != null ? y : '',
+      click_x_pct:     x != null && vw ? Number((x / vw).toFixed(4)) : '',
+      click_y_pct:     y != null && vh ? Number((y / vh).toFixed(4)) : '',
+      viewport_width:  vw,
+      viewport_height: vh,
     };
     if (params.next_screen_id) {
       lastScreenRef.current = params.next_screen_id;
@@ -86,6 +141,9 @@ export function useLogger(participant) {
     exportedRef.current = false;
     lastScreenRef.current = '';
 
+    idleMsRef.current = 0;
+    lastActivityRef.current = Date.now();
+
     const trial = {
       task_trial_id:    genId('TRL'),
       participant_id:   participant?.participant_id || 'UNKNOWN',
@@ -95,6 +153,7 @@ export function useLogger(participant) {
       start_time:       new Date().toISOString(),
       end_time:         null,
       duration_seconds: null,
+      idle_seconds:     null,
       completed:        false,
       success:          false,
       help_used:        false,
@@ -127,10 +186,17 @@ export function useLogger(participant) {
     const start = new Date(currentTrialRef.current.start_time);
     const duration = Math.round((end - start) / 1000);
 
+    if (lastActivityRef.current != null) {
+      const tailGap = end.getTime() - lastActivityRef.current;
+      if (tailGap > IDLE_THRESHOLD_MS) idleMsRef.current += tailGap;
+    }
+    const idleSeconds = Math.round(idleMsRef.current / 1000);
+
     const completed = {
       ...currentTrialRef.current,
       end_time:         end.toISOString(),
       duration_seconds: duration,
+      idle_seconds:     idleSeconds,
       completed:        true,
       success,
       help_used:        helpUsed,
@@ -184,6 +250,7 @@ export function useLogger(participant) {
       start_time:       t.start_time,
       end_time:         t.end_time,
       duration_seconds: t.duration_seconds,
+      idle_seconds:     t.idle_seconds,
       completed:        t.completed ? 'TRUE' : 'FALSE',
       success:          t.success   ? 'TRUE' : 'FALSE',
       help_used:        t.help_used ? 'TRUE' : 'FALSE',
@@ -192,18 +259,24 @@ export function useLogger(participant) {
     XLSX.utils.book_append_sheet(wb, wsTT, 'Task_Trials');
 
     const wsIE = XLSX.utils.json_to_sheet(interactionEvents.map(e => ({
-      event_id:       e.event_id,
-      task_trial_id:  e.task_trial_id,
-      participant_id: e.participant_id,
-      task_id:        e.task_id,
-      event_order:    e.event_order,
-      timestamp:      e.timestamp,
-      from_screen_id: e.from_screen_id,
-      screen_id:      e.screen_id,
-      action_type:    e.action_type,
-      target_id:      e.target_id,
-      target_label:   e.target_label,
-      next_screen_id: e.next_screen_id,
+      event_id:        e.event_id,
+      task_trial_id:   e.task_trial_id,
+      participant_id:  e.participant_id,
+      task_id:         e.task_id,
+      event_order:     e.event_order,
+      timestamp:       e.timestamp,
+      from_screen_id:  e.from_screen_id,
+      screen_id:       e.screen_id,
+      action_type:     e.action_type,
+      target_id:       e.target_id,
+      target_label:    e.target_label,
+      next_screen_id:  e.next_screen_id,
+      click_x:         e.click_x,
+      click_y:         e.click_y,
+      click_x_pct:     e.click_x_pct,
+      click_y_pct:     e.click_y_pct,
+      viewport_width:  e.viewport_width,
+      viewport_height: e.viewport_height,
     })));
     XLSX.utils.book_append_sheet(wb, wsIE, 'Interaction_Events');
 
@@ -251,24 +324,31 @@ export function useLogger(participant) {
         start_time:       t.start_time,
         end_time:         t.end_time,
         duration_seconds: t.duration_seconds,
+        idle_seconds:     t.idle_seconds,
         completed:        !!t.completed,
         success:          !!t.success,
         help_used:        !!t.help_used,
         notes:            t.notes,
       })),
       interactionEvents: interactionEvents.map(e => ({
-        event_id:       e.event_id,
-        task_trial_id:  e.task_trial_id,
-        participant_id: e.participant_id,
-        task_id:        e.task_id,
-        event_order:    e.event_order,
-        timestamp:      e.timestamp,
-        from_screen_id: e.from_screen_id,
-        screen_id:      e.screen_id,
-        action_type:    e.action_type,
-        target_id:      e.target_id,
-        target_label:   e.target_label,
-        next_screen_id: e.next_screen_id,
+        event_id:        e.event_id,
+        task_trial_id:   e.task_trial_id,
+        participant_id:  e.participant_id,
+        task_id:         e.task_id,
+        event_order:     e.event_order,
+        timestamp:       e.timestamp,
+        from_screen_id:  e.from_screen_id,
+        screen_id:       e.screen_id,
+        action_type:     e.action_type,
+        target_id:       e.target_id,
+        target_label:    e.target_label,
+        next_screen_id:  e.next_screen_id,
+        click_x:         e.click_x,
+        click_y:         e.click_y,
+        click_x_pct:     e.click_x_pct,
+        click_y_pct:     e.click_y_pct,
+        viewport_width:  e.viewport_width,
+        viewport_height: e.viewport_height,
       })),
     };
 

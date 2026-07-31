@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CONTACTS, CHATS, getChatContact, getChatFavKey } from '../data';
 import { SCREENS, TARGETS } from '../data';
 
@@ -130,9 +130,11 @@ function IconRail({ currentScreen, onNavigate, onLog, unreadCount }) {
 export default function Sidebar({
   currentScreen, activeChat, onSelectChat, onNavigate, onLog,
   searchQuery, setSearchQuery, chats, onLogout, onCreateGroup,
-  favoriteContacts,
+  favoriteContacts, isMobile = false,
 }) {
   const [showMenu, setShowMenu] = useState(false);
+  const menuAnchorRef = useRef(null);
+  const [menuPlacement, setMenuPlacement] = useState({ openUp: false, maxHeight: 400 });
   const [tab, setTab] = useState('all');
   const [readChats, setReadChats] = useState(new Set());
   const [viewingArchived, setViewingArchived] = useState(false);
@@ -239,6 +241,21 @@ export default function Sidebar({
     }
   };
 
+  const toggleSidebarMenu = () => {
+    onLog({ screen_id: SCREENS.CHAT_LIST, action_type:'tap', target_id: TARGETS.NAV_MENU, target_label:'menu' });
+    if (!showMenu) {
+      const rect = menuAnchorRef.current?.getBoundingClientRect();
+      if (rect) {
+        const margin = 12;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const openUp = spaceBelow < 260 && spaceAbove > spaceBelow;
+        setMenuPlacement({ openUp, maxHeight: Math.max(120, openUp ? spaceAbove : spaceBelow) });
+      }
+    }
+    setShowMenu(v => !v);
+  };
+
   const unreadCount = liveChats.filter(c => isUnread(c)).length;
 
   const sidebarMenuItems = [
@@ -256,10 +273,10 @@ export default function Sidebar({
   ];
 
   return (
-    <div style={{ display:'flex', height:'100%', flexShrink:0 }}>
-      <IconRail currentScreen={currentScreen} onNavigate={onNavigate} onLog={onLog} unreadCount={unreadCount} />
+    <div style={{ display:'flex', height:'100%', width: isMobile ? '100%' : 'auto', flex: isMobile ? '1 1 auto' : '0 0 auto' }}>
+      {!isMobile && <IconRail currentScreen={currentScreen} onNavigate={onNavigate} onLog={onLog} unreadCount={unreadCount} />}
 
-      <div style={{ width:412, background:'#ffffff', borderRight:'1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', flexShrink:0, overflow:'hidden' }}>
+      <div style={{ width: isMobile ? '100%' : 412, background:'#ffffff', borderRight: isMobile ? 'none' : '1px solid #e9edef', display:'flex', flexDirection:'column', height:'100%', flexShrink:0, overflow:'hidden' }}>
         <div style={{ padding:'12px 16px', background:'#ffffff', borderBottom:'1px solid #e9edef', display:'flex', alignItems:'center', justifyContent:'space-between', minHeight:60, flexShrink:0 }}>
           {isSearch || isNewChat || isArchived || isNewGroup ? (
             <div style={{ display:'flex', alignItems:'center', gap:12, flex:1 }}>
@@ -299,12 +316,18 @@ export default function Sidebar({
                 <IconBtn onClick={handleNewChatClick} title="New chat">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12zM7 9h10v2H7zm0-3h10v2H7zm0 6h7v2H7z"/></svg>
                 </IconBtn>
-                <div style={{ position:'relative' }}>
-                  <IconBtn onClick={() => { onLog({ screen_id: SCREENS.CHAT_LIST, action_type:'tap', target_id: TARGETS.NAV_MENU, target_label:'menu' }); setShowMenu(!showMenu); }} title="Menu">
+                <div ref={menuAnchorRef} style={{ position:'relative' }}>
+                  <IconBtn onClick={toggleSidebarMenu} title="Menu">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                   </IconBtn>
                   {showMenu && (
-                    <div style={{ position:'absolute', right:0, top:'100%', background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:100, minWidth:220, overflow:'hidden', padding:'6px 0' }}>
+                    <div style={{
+                      position:'absolute', right:0,
+                      ...(menuPlacement.openUp ? { bottom:'100%', marginBottom:8 } : { top:'100%', marginTop:0 }),
+                      background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef',
+                      zIndex:100, minWidth:220, maxWidth:'calc(100vw - 24px)',
+                      maxHeight: menuPlacement.maxHeight, overflowY:'auto', padding:'6px 0',
+                    }}>
                       {sidebarMenuItems.map(item => (
                         <div key={item.label}
                           onClick={() => {
@@ -350,7 +373,7 @@ export default function Sidebar({
         )}
 
         {!isSearch && !isNewChat && !isArchived && !isNewGroup && (
-          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 12px 10px', background:'#ffffff', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, padding:'2px 12px 10px', background:'#ffffff', flexShrink:0, overflowX:'auto' }}>
             {[
               { key:'all',        label:'All' },
               { key:'unread',     label:`Unread${unreadCount > 0 ? ` ${unreadCount}` : ''}` },
@@ -358,7 +381,7 @@ export default function Sidebar({
               { key:'groups',     label:'Groups' },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)} style={{
-                padding:'6px 14px', borderRadius:20, cursor:'pointer',
+                padding:'6px 14px', borderRadius:20, cursor:'pointer', flexShrink:0,
                 background: tab === t.key ? '#00a884' : 'transparent',
                 border: tab === t.key ? 'none' : '1px solid #d1d7db',
                 color: tab === t.key ? '#ffffff' : '#54656f',

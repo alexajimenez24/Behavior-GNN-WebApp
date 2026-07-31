@@ -1,7 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
-export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplete, startTime }) {
+export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplete, startTime, onHeightChange }) {
   const [showHint, setShowHint] = useState(false);
+  const barRef = useRef(null);
+
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el || !onHeightChange) return;
+    const measure = () => onHeightChange(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onHeightChange]);
 
   const handleHelp = () => {
     setShowHint(true);
@@ -9,21 +20,24 @@ export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplet
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0, right: 0,
-      zIndex: 300,
-      background: '#ffffff',
-      borderBottom: '2px solid #00a884',
-      boxShadow: '0 4px 20px rgba(0,168,132,0.15)',
-    }}>
-      <div style={{ display:'flex', alignItems:'center', gap:16, padding:'10px 20px' }}>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2 }}>
+    <div
+      ref={barRef}
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0,
+        zIndex: 300,
+        background: '#ffffff',
+        borderBottom: '2px solid #00a884',
+        boxShadow: '0 4px 20px rgba(0,168,132,0.15)',
+      }}
+    >
+      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px 16px', padding:'10px 16px' }}>
+        <div style={{ flex:'1 1 200px', minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2, flexWrap:'wrap' }}>
             <span style={{ background:'#00a884', color:'white', fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, letterSpacing:0.5, flexShrink:0 }}>
               TASK {taskIndex+1}/{totalTasks}
             </span>
-            <span style={{ color:'#111b21', fontSize:14, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+            <span style={{ color:'#111b21', fontSize:14, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
               {task.task_name}
             </span>
           </div>
@@ -39,14 +53,14 @@ export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplet
 
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
           {!showHint && (
-            <button onClick={handleHelp} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#54656f', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+            <button onClick={handleHelp} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#54656f', fontSize:13, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
               💡 Hint
             </button>
           )}
-          <button onClick={() => onComplete(true)} style={{ padding:'7px 16px', background:'#00a884', border:'none', borderRadius:8, color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>
+          <button onClick={() => onComplete(true)} style={{ padding:'7px 16px', background:'#00a884', border:'none', borderRadius:8, color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
             ✓ Done
           </button>
-          <button onClick={() => onComplete(false)} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#667781', fontSize:13, cursor:'pointer', fontFamily:'inherit' }}>
+          <button onClick={() => onComplete(false)} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#667781', fontSize:13, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
             Skip →
           </button>
         </div>

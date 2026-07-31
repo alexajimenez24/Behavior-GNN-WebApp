@@ -2,15 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>WhatsApp Research App</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        height: 100%;
+        width: 100%;
+        overscroll-behavior: none;
+      }
       body {
         font-family: -apple-system, "Segoe UI", "Helvetica Neue", Helvetica, Arial, Ubuntu, Cantarell, sans-serif;
-        background: #f0f2f5; overflow: hidden; height: 100vh;
+        background: #f0f2f5;
+        overflow: hidden;
       }
-      #root { height: 100vh; }
+      #root { height: 100%; width: 100%; }
     </style>
   </head>
   <body>

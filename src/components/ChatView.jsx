@@ -32,14 +32,14 @@ export default function ChatView({
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [showForward, setShowForward] = useState(null);
   const [showMsgMenu, setShowMsgMenu] = useState(null);
+  const [msgMenuPos, setMsgMenuPos] = useState({ left: 0, top: 0, maxHeight: 220 });
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [moreMenuPlacement, setMoreMenuPlacement] = useState({ openUp: false, maxHeight: 500 });
+  const moreMenuAnchorRef = useRef(null);
   const [attachAccept, setAttachAccept] = useState('*/*');
   const [messages, setMessages] = useState(chat.messages);
   const [flashId, setFlashId] = useState(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -75,17 +75,6 @@ export default function ChatView({
     }, 150);
     return () => clearTimeout(t);
   }, [highlightMessageId, chat.id]);
-
-
-  useEffect(() => {
-    return () => {
-      messagesRef.current.forEach(m => {
-        if (m.attachment?.isImage && m.attachment.url) {
-          URL.revokeObjectURL(m.attachment.url);
-        }
-      });
-    };
-  }, []);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -159,51 +148,22 @@ export default function ChatView({
     setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
-  const buildAttachmentMessage = (file, idx) => {
+  const handleFileChosen = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) { return; }
     const isImage = file.type.startsWith('image/');
-    return {
-      id: `MSG_ATT_${Date.now()}_${idx}`,
+    const newMsg = {
+      id: `MSG_ATT_${Date.now()}`,
       from: 'me',
       text: isImage ? '📷 Photo' : `📎 ${file.name}`,
       time: Date.now(),
       starred: false,
       attachment: { name: file.name, type: file.type, isImage, url: isImage ? URL.createObjectURL(file) : null },
     };
-  };
-
-  const sendAttachmentMessages = (newMsgs) => {
-    if (!newMsgs.length) return;
-    setMessages(prev => [...prev, ...newMsgs]);
-    newMsgs.forEach(newMsg => {
-      onSend && onSend({ chatId: chat.id, message: newMsg });
-      updateTaskState && updateTaskState('sentMessages', { chatId: chat.id, msg: newMsg });
-    });
-  };
-
-  const handleFilesChosen = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    sendAttachmentMessages(files.map(buildAttachmentMessage));
+    setMessages(prev => [...prev, newMsg]);
+    onSend && onSend({ chatId: chat.id, message: newMsg });
+    updateTaskState && updateTaskState('sentMessages', { chatId: chat.id, msg: newMsg });
     e.target.value = '';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    if (e.dataTransfer.types.includes('Files')) setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
-    if (!files.length) return;
-    sendAttachmentMessages(files.map(buildAttachmentMessage));
-    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type: 'drop', target_id: TARGETS.ATTACH_MENU_PHOTOS, target_label: 'dropped photo(s)' });
   };
 
   const attachOptions = [
@@ -252,6 +212,22 @@ export default function ChatView({
     item.action();
   };
 
+  const toggleMoreMenu = () => {
+    onLog({ screen_id: SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.CHAT_MORE_BTN, target_label:'more options' });
+    setShowAttachMenu(false);
+    if (!showMoreMenu) {
+      const rect = moreMenuAnchorRef.current?.getBoundingClientRect();
+      if (rect) {
+        const margin = 12;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+        const openUp = spaceBelow < 420 && spaceAbove > spaceBelow;
+        setMoreMenuPlacement({ openUp, maxHeight: Math.max(160, openUp ? spaceAbove : spaceBelow) });
+      }
+    }
+    setShowMoreMenu(v => !v);
+  };
+
   const replyRef = messages.find(m => m.id === replyTo?.id);
 
   return (
@@ -272,13 +248,19 @@ export default function ChatView({
         <div style={{ display:'flex', gap:4 }}>
           <IconBtn title="Video call"><svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg></IconBtn>
           <IconBtn title="Search in chat" onClick={handleOpenChatSearch}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#54656f" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></IconBtn>
-          <div style={{ position:'relative' }}>
-            <IconBtn title="More options" onClick={() => { onLog({ screen_id: SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.CHAT_MORE_BTN, target_label:'more options' }); setShowAttachMenu(false); setShowMoreMenu(v => !v); }}>
+          <div ref={moreMenuAnchorRef} style={{ position:'relative' }}>
+            <IconBtn title="More options" onClick={toggleMoreMenu}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="#54656f"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
             </IconBtn>
 
             {showMoreMenu && (
-              <div style={{ position:'absolute', right:0, top:'100%', marginTop:4, background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:70, minWidth:250, overflow:'hidden', padding:'6px 0' }}>
+              <div style={{
+                position:'absolute', right:0,
+                ...(moreMenuPlacement.openUp ? { bottom:'100%', marginBottom:4 } : { top:'100%', marginTop:4 }),
+                background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef',
+                zIndex:70, minWidth:250, maxWidth:'calc(100vw - 32px)',
+                maxHeight: moreMenuPlacement.maxHeight, overflowY:'auto', padding:'6px 0',
+              }}>
                 {moreMenuItems.map((item, i) => item.divider ? (
                   <div key={`div_${i}`} style={{ height:1, background:'#e9edef', margin:'6px 0' }} />
                 ) : (
@@ -296,24 +278,7 @@ export default function ChatView({
         </div>
       </div>
 
-      <div
-        onScroll={handleScroll}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}
-      >
-        {isDragOver && (
-          <div style={{
-            position:'absolute', inset:8, border:'2px dashed #00a884', borderRadius:12,
-            background:'rgba(0,168,132,0.08)', zIndex:5, display:'flex',
-            alignItems:'center', justifyContent:'center', pointerEvents:'none',
-          }}>
-            <div style={{ background:'#ffffff', padding:'10px 20px', borderRadius:8, color:'#00a884', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
-              📷 Drop photos to send
-            </div>
-          </div>
-        )}
+      <div onScroll={handleScroll} style={{ flex:1, overflowY:'auto', padding:'12px 8%', zIndex:1, position:'relative' }}>
         <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end', minHeight:'100%' }}>
           {messages.map((msg, i) => {
             const isMe = msg.from === 'me';
@@ -332,7 +297,30 @@ export default function ChatView({
                 {isHovered && (
                   <div style={{ display:'flex', alignItems:'center', gap:4, margin: isMe ? '0 8px 0 0' : '0 0 0 8px', order: isMe ? -1 : 1 }}>
                     <MsgActionBtn title="Reply" onClick={() => handleReply(msg)}>↩</MsgActionBtn>
-                    <MsgActionBtn title="More" onClick={() => setShowMsgMenu(menuOpen ? null : msg.id)}>⋮</MsgActionBtn>
+                    <MsgActionBtn title="More" onClick={(e) => {
+                      if (!menuOpen) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const margin = 10;
+                        const menuWidth = 180;
+                        const estMenuHeight = 190;  
+
+                        const spaceRight = window.innerWidth - rect.right - margin;
+                        const spaceLeft = rect.left - margin;
+                        const openLeft = spaceRight < menuWidth && spaceLeft > spaceRight;
+                        const left = openLeft ? rect.left - menuWidth - 8 : rect.right + 8;
+
+                        const spaceBelow = window.innerHeight - rect.top - margin;
+                        const spaceAbove = rect.bottom - margin;
+                        const alignBottom = spaceBelow < estMenuHeight && spaceAbove > spaceBelow;
+                        const maxHeight = Math.max(100, alignBottom ? spaceAbove : spaceBelow);
+                        const top = alignBottom
+                          ? Math.max(margin, rect.bottom - Math.min(estMenuHeight, spaceAbove))
+                          : rect.top;
+
+                        setMsgMenuPos({ left, top, maxHeight });
+                      }
+                      setShowMsgMenu(menuOpen ? null : msg.id);
+                    }}>⋮</MsgActionBtn>
                   </div>
                 )}
 
@@ -363,7 +351,11 @@ export default function ChatView({
                 </div>
 
                 {menuOpen && (
-                  <div style={{ position:'absolute', [isMe ? 'right' : 'left']:0, top:'100%', background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:50, minWidth:180, overflow:'hidden' }}>
+                  <div style={{
+                    position:'fixed', left:msgMenuPos.left, top:msgMenuPos.top,
+                    background:'#ffffff', borderRadius:8, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef',
+                    zIndex:500, width:180, maxHeight:msgMenuPos.maxHeight, overflowY:'auto',
+                  }}>
                     {[
                       { label:'Reply', action:() => handleReply(msg) },
                       { label:'Forward', action:() => handleForwardInit(msg) },
@@ -397,11 +389,11 @@ export default function ChatView({
         </div>
       )}
 
-      <input ref={fileInputRef} type="file" accept={attachAccept} multiple style={{ display:'none' }} onChange={handleFilesChosen} />
+      <input ref={fileInputRef} type="file" accept={attachAccept} style={{ display:'none' }} onChange={handleFileChosen} />
 
       <div style={{ background:'#f0f2f5', padding:'8px 12px 10px', zIndex:10, position:'relative' }}>
         {showAttachMenu && (
-          <div style={{ position:'absolute', bottom:'100%', left:8, marginBottom:8, background:'#ffffff', borderRadius:12, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:70, padding:'8px 6px', minWidth:230 }}>
+          <div style={{ position:'absolute', bottom:'100%', left:8, marginBottom:8, background:'#ffffff', borderRadius:12, boxShadow:'0 4px 18px rgba(0,0,0,0.18)', border:'1px solid #e9edef', zIndex:70, padding:'8px 6px', minWidth:230, maxWidth:'calc(100vw - 32px)', maxHeight:'60dvh', overflowY:'auto' }}>
             {attachOptions.map(item => (
               <div key={item.label}
                 onClick={() => item.stub
@@ -448,12 +440,12 @@ export default function ChatView({
       </div>
 
       {(showAttachMenu || showMoreMenu) && (
-        <div onClick={() => { setShowAttachMenu(false); setShowMoreMenu(false); }} style={{ position:'fixed', inset:0, zIndex:9 }} />
+        <div onClick={() => { setShowAttachMenu(false); setShowMoreMenu(false); }} style={{ position:'fixed', inset:0, zIndex:60 }} />
       )}
 
       {showForward && (
         <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:'#ffffff', borderRadius:12, width:380, maxHeight:'70vh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 10px 40px rgba(0,0,0,0.25)' }}>
+          <div style={{ background:'#ffffff', borderRadius:12, width:'min(380px, 92vw)', maxHeight:'80dvh', overflow:'hidden', display:'flex', flexDirection:'column', boxShadow:'0 10px 40px rgba(0,0,0,0.25)' }}>
             <div style={{ padding:'16px 20px', borderBottom:'1px solid #e9edef', display:'flex', alignItems:'center', gap:12 }}>
               <button onClick={() => { setShowForward(null); onLog({ screen_id:SCREENS.CHAT_VIEW, action_type:'tap', target_id:TARGETS.FORWARD_CANCEL, target_label:'cancel forward' }); }}
                 style={{ background:'none', border:'none', color:'#667781', cursor:'pointer', fontSize:20 }}>×</button>

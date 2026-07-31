@@ -7,13 +7,14 @@ const SHEET_SCHEMAS = {
   ],
   Task_Trials: [
     'task_trial_id', 'participant_id', 'task_id', 'task_name', 'task_order',
-    'start_time', 'end_time', 'duration_seconds', 'completed', 'success',
+    'start_time', 'end_time', 'duration_seconds', 'idle_seconds', 'completed', 'success',
     'help_used', 'notes',
   ],
   Interaction_Events: [
     'event_id', 'task_trial_id', 'participant_id', 'task_id', 'event_order',
     'timestamp', 'from_screen_id', 'screen_id', 'action_type', 'target_id',
     'target_label', 'next_screen_id',
+    'click_x', 'click_y', 'click_x_pct', 'click_y_pct', 'viewport_width', 'viewport_height',
   ],
 };
 
@@ -47,10 +48,8 @@ async function getSheetsClient() {
 
   const authOptions = { scopes: ['https://www.googleapis.com/auth/spreadsheets'] };
   if (credentials) {
-    // Deployed environments: paste the service account JSON into an env var.
     authOptions.credentials = credentials;
   } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    // Local development: point at a key file on disk, as before.
     authOptions.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   } else {
     throw new Error(
@@ -100,6 +99,23 @@ async function ensureSheetExists(sheets, spreadsheetId, tabName, headers) {
       valueInputOption: 'RAW',
       requestBody: { values: [headers] },
     });
+    return;
+  }
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${tabName}!A1:ZZ1`,
+  });
+  const existingHeaders = (headerRes.data.values && headerRes.data.values[0]) || [];
+  const missing = headers.filter(h => !existingHeaders.includes(h));
+  if (missing.length > 0) {
+    const mergedHeaders = [...existingHeaders, ...missing];
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [mergedHeaders] },
+    });
   }
 }
 
@@ -130,7 +146,13 @@ async function insertBlankRow(sheets, spreadsheetId, tabName) {
 
 async function appendRows(sheets, spreadsheetId, tabName, rows) {
   if (!rows || rows.length === 0) return;
-  const headers = SHEET_SCHEMAS[tabName];
+
+  const headerRes = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${tabName}!A1:ZZ1`,
+  });
+  const headers = (headerRes.data.values && headerRes.data.values[0]) || SHEET_SCHEMAS[tabName];
+
   const values = rows.map(row => headers.map(h => {
     const v = row[h];
     if (v === undefined || v === null) return '';

@@ -3,7 +3,7 @@ import React from 'react';
 export function TaskBriefing({ task, taskIndex, totalTasks, onStart }) {
   return (
     <div style={{ position:'absolute', inset:0, background:'rgba(17,27,33,0.45)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'#ffffff', borderRadius:16, padding:'36px 44px', width:480, boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div style={{ background:'#ffffff', borderRadius:16, padding:'clamp(20px,4vw,36px) clamp(20px,5vw,44px)', width:'min(480px, 92vw)', maxHeight:'90dvh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
           <div style={{ background:'#00a884', borderRadius:8, padding:'4px 12px', fontSize:12, color:'white', fontWeight:600 }}>
             Task {taskIndex + 1} of {totalTasks}
@@ -14,12 +14,6 @@ export function TaskBriefing({ task, taskIndex, totalTasks, onStart }) {
         </div>
         <h2 style={{ color:'#111b21', fontSize:22, fontWeight:600, marginBottom:12 }}>{task.task_name}</h2>
         <p style={{ color:'#3b4a54', fontSize:15, lineHeight:1.6, marginBottom:28 }}>{task.task_description}</p>
-        <div style={{ background:'#f0f2f5', border:'1px solid #e9edef', borderRadius:10, padding:'14px 18px', marginBottom:28 }}>
-          <div style={{ color:'#00a884', fontSize:12, fontWeight:600, marginBottom:4, letterSpacing:0.4 }}>WHAT WE'RE MEASURING</div>
-          <p style={{ color:'#667781', fontSize:13, lineHeight:1.5 }}>
-            Your navigation path, time taken, screens visited, and any actions you perform will be recorded for research purposes.
-          </p>
-        </div>
         <button onClick={onStart} style={{
           width:'100%', padding:'13px 0', background:'#00a884', border:'none', borderRadius:10,
           color:'white', fontSize:15, fontWeight:600, cursor:'pointer',
@@ -37,7 +31,7 @@ export function TaskComplete({ trial, task, taskIndex, totalTasks, isSuccess, on
 
   return (
     <div style={{ position:'absolute', inset:0, background:'rgba(17,27,33,0.5)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'#ffffff', borderRadius:16, padding:'36px 44px', width:460, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', textAlign:'center' }}>
+      <div style={{ background:'#ffffff', borderRadius:16, padding:'clamp(20px,4vw,36px) clamp(20px,5vw,44px)', width:'min(460px, 92vw)', maxHeight:'90dvh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', textAlign:'center' }}>
         <div style={{ fontSize:52, marginBottom:16 }}>{isSuccess ? '✅' : '⏭️'}</div>
         <h2 style={{ color:'#111b21', fontSize:20, fontWeight:600, marginBottom:8 }}>
           {isSuccess ? 'Task Completed!' : 'Task Recorded'}
@@ -47,7 +41,7 @@ export function TaskComplete({ trial, task, taskIndex, totalTasks, isSuccess, on
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:28 }}>
           <StatBox label="Time" value={`${mins}m ${secs}s`} />
           <StatBox label="Status" value={isSuccess ? 'Success' : 'Incomplete'} color={isSuccess ? '#00a884' : '#c9820a'} />
-          <StatBox label="Help Used" value={trial?.help_used ? 'Yes' : 'No'} />
+          <StatBox label="Idle Time" value={`${trial?.idle_seconds ?? 0}s`} />
           <StatBox label="Progress" value={`${taskIndex + 1} / ${totalTasks}`} />
         </div>
 
@@ -57,7 +51,7 @@ export function TaskComplete({ trial, task, taskIndex, totalTasks, isSuccess, on
           </button>
         ) : (
           <button onClick={onNext} style={btnStyle('#00a884', '#ffffff')}>
-            Next Task ({taskIndex + 2} of {totalTasks}) →
+            Continue to Next Task ({taskIndex + 2} of {totalTasks}) →
           </button>
         )}
       </div>
@@ -69,11 +63,11 @@ export function SessionComplete({ trials, participant, onExport, onRestart, shee
   const total = trials.length;
   const succeeded = trials.filter(t => t.success).length;
   const avgTime = total > 0 ? Math.round(trials.reduce((s, t) => s + (t.duration_seconds || 0), 0) / total) : 0;
-  const helpCount = trials.filter(t => t.help_used).length;
+  const avgIdle = total > 0 ? Math.round(trials.reduce((s, t) => s + (t.idle_seconds || 0), 0) / total) : 0;
 
   return (
-    <div style={{ height:'100vh', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'#ffffff', borderRadius:16, padding:'40px 48px', width:560, boxShadow:'0 20px 60px rgba(0,0,0,0.12)' }}>
+    <div style={{ height:'100%', width:'100%', background:'#f0f2f5', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ background:'#ffffff', borderRadius:16, padding:'clamp(20px,4vw,40px) clamp(20px,5vw,48px)', width:'min(560px, 94vw)', maxHeight:'92dvh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.12)' }}>
         <div style={{ textAlign:'center', marginBottom:32 }}>
           <div style={{ fontSize:56, marginBottom:16 }}>🎉</div>
           <h2 style={{ color:'#111b21', fontSize:24, fontWeight:600, marginBottom:8 }}>Session Complete</h2>
@@ -83,7 +77,7 @@ export function SessionComplete({ trials, participant, onExport, onRestart, shee
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:28 }}>
           <StatBox label="Tasks Completed" value={`${succeeded} / ${total}`} color='#00a884' large />
           <StatBox label="Avg. Time" value={`${avgTime}s`} large />
-          <StatBox label="Help Requests" value={helpCount} />
+          <StatBox label="Avg. Idle Time" value={`${avgIdle}s`} />
           <StatBox label="SCC Group" value={participant?.scc_status === 'scc' ? 'SCC' : 'Non-SCC'} />
         </div>
 

@@ -91,16 +91,11 @@ export const TARGETS = {
   ATTACH_MENU_POLL:    'TGT_ATTACH_POLL',
 };
 
-
 export const CONTACTS = [
   { id: 'C01', name: 'Alice Johnson',   avatar: 'AJ', color: '#6B8CFF', phone: '+1 312 555 0101' },
   { id: 'C02', name: 'Bob Martinez',    avatar: 'BM', color: '#FF8C69', phone: '+1 312 555 0102' },
   { id: 'C03', name: 'Carol Williams',  avatar: 'CW', color: '#69FFB8', phone: '+1 312 555 0103' },
-  { id: 'C04', name: 'David Lee',       avatar: 'DL', color: '#FFD369', phone: '+1 312 555 0104' },
   { id: 'C05', name: 'Emma Davis',      avatar: 'ED', color: '#FF69E1', phone: '+1 312 555 0105' },
-  { id: 'C06', name: 'Frank Chen',      avatar: 'FC', color: '#69E1FF', phone: '+1 312 555 0106' },
-  { id: 'C07', name: 'Grace Kim',       avatar: 'GK', color: '#B869FF', phone: '+1 312 555 0107' },
-  { id: 'C08', name: 'Henry Brown',     avatar: 'HB', color: '#FF6969', phone: '+1 312 555 0108' },
 ];
 
 export function getChatContact(chat) {
@@ -160,15 +155,6 @@ export const CHATS = [
     ]
   },
   {
-    id: 'CH04', contactId: 'C04',
-    messages: [
-      { id: 'MSG017', from: 'C04', text: 'Can you review the proposal I sent?', time: m(400), starred: false },
-      { id: 'MSG018', from: 'me',  text: 'Just finished reading it. Looks good overall', time: m(390), starred: false },
-      { id: 'MSG019', from: 'C04', text: 'Any suggestions for improvement?', time: m(385), starred: false },
-      { id: 'MSG020', from: 'C04', text: 'The deadline is end of this week', time: m(380), starred: false },
-    ]
-  },
-  {
     id: 'CH05', contactId: 'C05',
     messages: [
       { id: 'MSG021', from: 'C05', text: 'The package arrived! Thank you!', time: m(500), starred: false },
@@ -176,32 +162,17 @@ export const CHATS = [
       { id: 'MSG023', from: 'C05', text: 'I love it, exactly what I wanted', time: m(490), starred: false },
     ]
   },
-  {
-    id: 'CH06', contactId: 'C06',
-    messages: [
-      { id: 'MSG024', from: 'C06', text: 'Quick question about the project timeline', time: m(600), starred: false },
-      { id: 'MSG025', from: 'me',  text: 'Sure, what do you need to know?', time: m(595), starred: false },
-      { id: 'MSG026', from: 'C06', text: 'When is the Phase 2 delivery due?', time: m(590), starred: false },
-      { id: 'MSG027', from: 'C06', text: 'We need to update the stakeholders', time: m(585), starred: false },
-    ]
-  },
-  {
-    id: 'CH07', contactId: 'C07',
-    messages: [
-      { id: 'MSG028', from: 'C07', text: 'Are you free this weekend?', time: m(700), starred: false },
-      { id: 'MSG029', from: 'me',  text: 'Saturday afternoon should work!', time: m(695), starred: false },
-      { id: 'MSG030', from: 'C07', text: 'Perfect! Let us go to the art exhibit', time: m(690), starred: false },
-    ]
-  },
-  {
-    id: 'CH08', contactId: 'C08',
-    messages: [
-      { id: 'MSG031', from: 'C08', text: 'Remember to submit your timesheet', time: m(800), starred: false },
-      { id: 'MSG032', from: 'me',  text: 'Thanks for the reminder, doing it now', time: m(795), starred: false },
-      { id: 'MSG033', from: 'C08', text: 'Great, HR needs it by Friday', time: m(790), starred: false },
-    ]
-  },
 ];
 
-
-export const TASKS = [];
+export const TASKS = [
+  {
+    task_id: 'T01',
+    task_name: 'Forward a Message',
+    task_description: 'Forward the most recent message from Alice to Bob.',
+  },
+  {
+    task_id: 'T02',
+    task_name: 'Create a Group',
+    task_description: 'Create a group chat between Alice, Carol, and Emma.',
+  },
+];
