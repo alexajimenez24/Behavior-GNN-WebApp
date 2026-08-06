@@ -5,6 +5,7 @@ import { useIsMobile, useAppHeight } from './responsive';
 import ParticipantSetup from './components/ParticipantSetup';
 import Sidebar from './components/Sidebar';
 import ChatView from './components/ChatView';
+import TaskBar from './components/TaskBar';
 import { TaskBriefing, TaskComplete, SessionComplete } from './components/TaskScreens';
 import { ContactInfo, ChatSearchPanel, StarredMessages, Settings, EmptyState } from './components/SecondaryScreens';
 
@@ -24,6 +25,7 @@ export default function App() {
   const [taskStartTime, setTaskStartTime] = useState(null);
   const [lastTrial, setLastTrial] = useState(null);
   const [lastSuccess, setLastSuccess] = useState(false);
+  const [taskBarHeight, setTaskBarHeight] = useState(0);
 
   const [currentScreen, setCurrentScreen] = useState(SCREENS.CHAT_LIST);
   const [activeChat, setActiveChat] = useState(null);
@@ -331,6 +333,14 @@ export default function App() {
 
   const taskOverlays = (
     <>
+      <TaskBar
+        task={currentTask}
+        taskIndex={taskIndex}
+        totalTasks={tasks.length}
+        active={taskPhase === 'active'}
+        onLog={logEvent}
+        onHeightChange={setTaskBarHeight}
+      />
       {taskPhase === 'briefing' && (
         <TaskBriefing task={currentTask} taskIndex={taskIndex} totalTasks={tasks.length} onStart={handleTaskStart} />
       )}
@@ -349,7 +359,11 @@ export default function App() {
   );
 
   return (
-    <div style={{ height:'var(--app-height, 100dvh)', width:'100%', display:'flex', flexDirection:'column', background:'#f0f2f5', overflow:'hidden' }}>
+    <div style={{
+      height:'var(--app-height, 100dvh)', width:'100%', display:'flex', flexDirection:'column',
+      background:'#f0f2f5', overflow:'hidden', boxSizing:'border-box',
+      paddingTop: taskBarHeight, transition:'padding-top 0.15s',
+    }}>
       <div style={{ display:'flex', flex:1, overflow:'hidden', position:'relative' }}>
         <div style={{ display:'flex', width:'100%', height:'100%', boxSizing:'border-box' }}>
 

@@ -1,8 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplete, startTime, onHeightChange }) {
-  const [showHint, setShowHint] = useState(false);
+export default function TaskBar({ task, taskIndex, totalTasks, active = true, onLog, onHeightChange }) {
+  const [showFeedback, setShowFeedback] = useState(false);
+  const timeoutRef = useRef(null);
   const barRef = useRef(null);
+
+  useEffect(() => {
+    setShowFeedback(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [task?.task_id]);
 
   useEffect(() => {
     const el = barRef.current;
@@ -12,11 +21,20 @@ export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplet
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [onHeightChange]);
+  }, [onHeightChange, showFeedback]);
 
-  const handleHelp = () => {
-    setShowHint(true);
-    onHelp();
+  const handleDoneClick = () => {
+    if (!active) return;
+
+    onLog && onLog({
+      action_type:  'tap',
+      target_id:    'TGT_TASK_DONE',
+      target_label: 'done button (premature)',
+    });
+
+    setShowFeedback(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setShowFeedback(false), 4000);
   };
 
   return (
@@ -31,39 +49,49 @@ export default function TaskBar({ task, taskIndex, totalTasks, onHelp, onComplet
         boxShadow: '0 4px 20px rgba(0,168,132,0.15)',
       }}
     >
-      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'8px 16px', padding:'10px 16px' }}>
-        <div style={{ flex:'1 1 200px', minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:16, padding:'10px 20px', position:'relative' }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:2 }}>
             <span style={{ background:'#00a884', color:'white', fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20, letterSpacing:0.5, flexShrink:0 }}>
               TASK {taskIndex+1}/{totalTasks}
             </span>
-            <span style={{ color:'#111b21', fontSize:14, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>
+            <span style={{ color:'#111b21', fontSize:14, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {task.task_name}
             </span>
           </div>
           <p style={{ color:'#667781', fontSize:12, margin:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
             {task.task_description}
           </p>
-          {showHint && (
-            <div style={{ background:'#e7f8f3', border:'1px solid #00a884', borderRadius:6, padding:'6px 12px', marginTop:6, fontSize:12, color:'#00806b' }}>
-              💡 {task.hint}
-            </div>
-          )}
         </div>
 
         <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-          {!showHint && (
-            <button onClick={handleHelp} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#54656f', fontSize:13, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-              💡 Hint
-            </button>
-          )}
-          <button onClick={() => onComplete(true)} style={{ padding:'7px 16px', background:'#00a884', border:'none', borderRadius:8, color:'white', fontSize:13, fontWeight:600, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+          <button
+            onClick={handleDoneClick}
+            disabled={!active}
+            style={{
+              padding:'7px 16px',
+              background: active ? '#00a884' : '#cfe9e0',
+              border:'none', borderRadius:8,
+              color: active ? 'white' : '#7fae9f',
+              fontSize:13, fontWeight:600,
+              cursor: active ? 'pointer' : 'default',
+              fontFamily:'inherit',
+            }}
+          >
             ✓ Done
           </button>
-          <button onClick={() => onComplete(false)} style={{ padding:'7px 14px', background:'#f0f2f5', border:'1px solid #d1d7db', borderRadius:8, color:'#667781', fontSize:13, cursor:'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
-            Skip →
-          </button>
         </div>
+
+        {showFeedback && (
+          <div style={{
+            position:'absolute', top:'100%', left:20, right:20, marginTop:8,
+            background:'#fdecea', border:'1px solid #e57373', borderRadius:6,
+            padding:'6px 12px', fontSize:12, color:'#c0392b',
+            boxShadow:'0 4px 12px rgba(0,0,0,0.1)',
+          }}>
+            ⚠️ Not quite yet — this task isn't complete. Keep going!
+          </div>
+        )}
       </div>
     </div>
   );
